@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Nomi</title>
+  <style>
+    :root {
+      --bg: #12141a;
+      --card: #1c1f28;
+      --border: #2c3040;
+      --text: #e8eaf0;
+      --muted: #9aa0b0;
+      --accent: #4fc3a1;
+      --accent-hover: #5fd4b2;
+      --error: #e57373;
+      --success: #4fc3a1;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+    .card {
+      width: 100%;
+      max-width: 34rem;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 2rem;
+      height: fit-content;
+    }
+    h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
+    p.subtitle { margin: 0 0 1.5rem; color: var(--muted); font-size: .9rem; }
+    label { display: block; margin: 1rem 0 .35rem; font-weight: 600; font-size: .9rem; }
+    select, input[type="text"] {
+      width: 100%;
+      padding: .6rem .7rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+      font-size: 1rem;
+    }
+    select:focus, input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+    .dropzone {
+      margin-top: .35rem;
+      border: 2px dashed var(--border);
+      border-radius: 10px;
+      padding: 1.5rem;
+      text-align: center;
+      color: var(--muted);
+      cursor: pointer;
+      transition: border-color .15s, background .15s;
+    }
+    .dropzone.dragover { border-color: var(--accent); background: rgba(79, 195, 161, .07); }
+    .dropzone input[type="file"] { display: none; }
+    .file-list { list-style: none; padding: 0; margin: .5rem 0 0; font-size: .85rem; color: var(--muted); }
+    .file-list li { padding: .15rem 0; overflow-wrap: anywhere; }
+    button {
+      margin-top: 1.5rem;
+      width: 100%;
+      padding: .75rem;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      color: #0d1117;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    button:hover { background: var(--accent-hover); }
+    button:disabled { opacity: .5; cursor: not-allowed; }
+    .flash { padding: .6rem .8rem; border-radius: 8px; margin-bottom: .5rem; font-size: .9rem; }
+    .flash.success { background: rgba(79, 195, 161, .12); border: 1px solid var(--success); }
+    .flash.error { background: rgba(229, 115, 115, .12); border: 1px solid var(--error); }
+    .hint { color: var(--muted); font-size: .8rem; margin-top: .3rem; }
+    .badge {
+      display: inline-block;
+      font-size: .75rem;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      border-radius: 999px;
+      padding: .1rem .6rem;
+      margin-bottom: 1rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>📚 Nomi</h1>
+    <p class="subtitle">Upload comics &amp; manga straight into your Kavita library folders.</p>
+
+    {% if kavita_scan_enabled %}
+      <span class="badge">Auto-scan enabled</span>
+    {% endif %}
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="flash {{ category }}">{{ message }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="post" action="{{ url_for('upload') }}" enctype="multipart/form-data" id="upload-form">
+      <label for="library">Library</label>
+      <select name="library" id="library" required>
+        <option value="" disabled {{ 'selected' if libraries|length != 1 }}>Choose a library…</option>
+        {% for name, path in libraries.items() %}
+          <option value="{{ name }}" {{ 'selected' if libraries|length == 1 }}>{{ name }} — {{ path }}</option>
+        {% endfor %}
+      </select>
+
+      <label for="series">Series</label>
+      <input type="text" name="series" id="series" list="series-options"
+             placeholder="e.g. One Piece" autocomplete="off" required>
+      <datalist id="series-options"></datalist>
+      <p class="hint">Pick an existing series to add to its folder, or type a new name to create one.</p>
+
+      <label>Files</label>
+      <div class="dropzone" id="dropzone">
+        <input type="file" name="files" id="files" multiple
+               accept="{% for ext in allowed_extensions %}.{{ ext }}{{ ',' if not loop.last }}{% endfor %}">
+        <span id="dropzone-text">Drag &amp; drop files here, or click to browse</span>
+        <ul class="file-list" id="file-list"></ul>
+      </div>
+      <p class="hint">Allowed: {{ allowed_extensions | join(', ') }}</p>
+
+      <button type="submit" id="submit-btn">Upload</button>
+    </form>
+  </div>
+
+  <script>
+    const seriesByLibrary = {{ series_by_library | tojson }};
+    const librarySelect = document.getElementById('library');
+    const seriesOptions = document.getElementById('series-options');
+    const dropzone = document.getElementById('dropzone');
+    const fileInput = document.getElementById('files');
+    const fileList = document.getElementById('file-list');
+    const form = document.getElementById('upload-form');
+    const submitBtn = document.getElementById('submit-btn');
+
+    function refreshSeriesOptions() {
+      seriesOptions.innerHTML = '';
+      (seriesByLibrary[librarySelect.value] || []).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        seriesOptions.appendChild(opt);
+      });
+    }
+    librarySelect.addEventListener('change', refreshSeriesOptions);
+    refreshSeriesOptions();
+
+    function showFiles() {
+      fileList.innerHTML = '';
+      [...fileInput.files].forEach(f => {
+        const li = document.createElement('li');
+        li.textContent = `${f.name} (${(f.size / 1048576).toFixed(1)} MB)`;
+        fileList.appendChild(li);
+      });
+    }
+
+    dropzone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', showFiles);
+
+    ['dragenter', 'dragover'].forEach(evt =>
+      dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.add('dragover'); }));
+    ['dragleave', 'drop'].forEach(evt =>
+      dropzone.addEventListener(evt, e => { e.preventDefault(); dropzone.classList.remove('dragover'); }));
+    dropzone.addEventListener('drop', e => {
+      fileInput.files = e.dataTransfer.files;
+      showFiles();
+    });
+
+    form.addEventListener('submit', () => {
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Uploading…';
+    });
+  </script>
+</body>
+</html>
