@@ -49,3 +49,7 @@ will pick them up on its next scheduled scan (or a manual scan).
 - Files that already exist in the target folder are skipped, never overwritten.
 - The app has no authentication — keep it on your LAN or put it behind a
   reverse proxy with auth if you expose it.
+
+## License
+
+[MIT](LICENSE)
