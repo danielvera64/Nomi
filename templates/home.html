@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+
+{% block styles %}
+    .tiles { display: grid; gap: .6rem; }
+    .tile {
+      display: flex;
+      align-items: center;
+      gap: .85rem;
+      padding: 1rem;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      color: var(--text);
+      text-decoration: none;
+      transition: border-color .15s, background .15s;
+    }
+    .tile:hover { border-color: var(--accent); background: rgba(79, 195, 161, .07); }
+    .tile .icon { font-size: 1.6rem; line-height: 1; flex-shrink: 0; }
+    .tile .label { font-weight: 600; }
+    .tile .sub { display: block; font-weight: 400; font-size: .78rem; color: var(--muted); margin-top: .15rem; overflow-wrap: anywhere; }
+    .tile.primary { border-color: var(--accent); background: rgba(79, 195, 161, .1); }
+    .tile.primary:hover { background: rgba(79, 195, 161, .18); }
+    .tile .arrow { margin-left: auto; color: var(--muted); font-size: .9rem; flex-shrink: 0; }
+    .section { margin: 1.6rem 0 .6rem; font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+{% endblock %}
+
+{% block content %}
+  <h1>📚 Nomi</h1>
+  <p class="subtitle">Your self-hosted library, all in one place.</p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div class="flash {{ category }}">{{ message }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div class="tiles">
+    <a class="tile primary" href="{{ url_for('uploader') }}">
+      <span class="icon">📤</span>
+      <span class="label">Uploader<span class="sub">Send comics, manga &amp; books to your library</span></span>
+      <span class="arrow">→</span>
+    </a>
+  </div>
+
+  {% if external_apps %}
+    <p class="section">Other apps</p>
+    <div class="tiles">
+      {% for name, url in external_apps.items() %}
+        <a class="tile" href="{{ url }}" target="_blank" rel="noopener noreferrer">
+          <span class="icon">{{ app_icons.get(name, '🔗') }}</span>
+          <span class="label">{{ name }}<span class="sub">{{ url }}</span></span>
+          <span class="arrow">↗</span>
+        </a>
+      {% endfor %}
+    </div>
+  {% else %}
+    <p class="section">Other apps</p>
+    <p class="hint">None configured yet — add <code>APP_KAVITA=…</code> or <code>APP_IMMICH=…</code> to your .env file.</p>
+  {% endif %}
+{% endblock %}

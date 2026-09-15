@@ -51,6 +51,50 @@ def load_libraries() -> dict[str, Path]:
 LIBRARIES = load_libraries()
 
 
+# Emoji shown on the home page for apps we know by name; anything else gets a
+# generic one. Purely cosmetic — an unknown app still works.
+APP_ICONS = {
+    "Kavita": "📖",
+    "Immich": "📷",
+    "Jellyfin": "🎬",
+    "Plex": "🎬",
+    "Navidrome": "🎵",
+    "Nextcloud": "☁️",
+    "Home Assistant": "🏠",
+    "Audiobookshelf": "🎧",
+}
+
+
+def load_apps() -> dict[str, str]:
+    """Read APP_<NAME>=<url> entries from the environment.
+
+    Example: APP_IMMICH=http://nas:2283 -> {"Immich": "http://nas:2283"}
+    A bare host is assumed to be http://, and an entry carrying any other
+    scheme is dropped so a stray value cannot become a javascript: link.
+    """
+    apps = {}
+    for key, value in os.environ.items():
+        if not key.startswith("APP_") or not value.strip():
+            continue
+        url = value.strip()
+        scheme = re.match(r"([A-Za-z][A-Za-z0-9+.\-]*)://", url)
+        if scheme:
+            if scheme.group(1).lower() not in ("http", "https"):
+                continue
+        elif re.match(r"[A-Za-z][A-Za-z0-9+.\-]*:(?!\d)", url):
+            # 'javascript:', 'data:', 'file:' … — never a link target. The
+            # lookahead keeps a bare 'host:port' out of this branch.
+            continue
+        else:
+            url = "http://" + url
+        name = key[len("APP_"):].replace("_", " ").strip().title()
+        apps[name] = url
+    return dict(sorted(apps.items(), key=lambda item: item[0].casefold()))
+
+
+EXTERNAL_APPS = load_apps()
+
+
 def sanitize_series_name(name: str) -> str:
     """Make a series name safe to use as a single folder name."""
     name = unicodedata.normalize("NFKC", name).strip()
@@ -171,9 +215,15 @@ def trigger_kavita_scan() -> str | None:
 
 @app.route("/", methods=["GET"])
 def index():
+    """Launcher: the uploader plus links to other self-hosted apps."""
+    return render_template("home.html", external_apps=EXTERNAL_APPS, app_icons=APP_ICONS)
+
+
+@app.route("/uploader", methods=["GET"])
+def uploader():
     series_by_library = {name: existing_series(root) for name, root in LIBRARIES.items()}
     return render_template(
-        "index.html",
+        "uploader.html",
         libraries=LIBRARIES,
         series_by_library=series_by_library,
         allowed_extensions=sorted(ALLOWED_EXTENSIONS),
@@ -190,27 +240,27 @@ def upload():
 
     if year and not re.fullmatch(r"\d{4}", year):
         flash("Year must be a 4-digit number.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("uploader"))
     if library_name not in LIBRARIES:
         flash("Please choose a valid library.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("uploader"))
     if not series_name:
         flash("Please enter a series name.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("uploader"))
     if not files:
         flash("Please choose at least one file to upload.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("uploader"))
 
     library_root = LIBRARIES[library_name]
     if not library_root.is_dir():
         flash(f"Library path does not exist: {library_root}", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("uploader"))
 
     series_dir = library_root / series_name
     # Guard against any path traversal that slipped through sanitization.
     if series_dir.resolve().parent != library_root.resolve():
         flash("Invalid series name.", "error")
-        return redirect(url_for("index"))
+        return redirect(url_for("uploader"))
 
     is_new_series = not series_dir.exists()
     if not is_new_series:
@@ -251,7 +301,7 @@ def upload():
     for item in skipped:
         flash(f"Skipped {item}", "error")
 
-    return redirect(url_for("index"))
+    return redirect(url_for("uploader"))
 
 
 if __name__ == "__main__":

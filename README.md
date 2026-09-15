@@ -1,8 +1,12 @@
 # Nomi
 
 Nomi is a small Flask web app for uploading comics, manga, and books into a
-self-hosted [Kavita](https://www.kavitareader.com/) library. Files are stored
-in the layout Kavita expects:
+self-hosted [Kavita](https://www.kavitareader.com/) library.
+
+The home page is a launcher: one button opens Nomi's own uploader, and the
+rest are links to your other self-hosted apps (Kavita, Immich, anything else
+you configure), which open in a new tab. Files are stored in the layout
+Kavita expects:
 
 ```
 <Library Root>/
@@ -41,6 +45,7 @@ Open http://localhost:5000 in your browser.
 | Variable | Description |
 | --- | --- |
 | `LIBRARY_<NAME>` | One per library: root path of that Kavita library (e.g. `LIBRARY_MANGA=/data/manga`, `LIBRARY_BOOKS=/data/books`). Add as many as you need. |
+| `APP_<NAME>` | One per external app: its URL (e.g. `APP_KAVITA=http://nas:5001`, `APP_IMMICH=http://nas:2283`). Each becomes a button on the home page that opens in a new tab. A bare host gets `http://`; non-http(s) values are ignored. |
 | `HOST` / `PORT` | Where the app listens (defaults: `0.0.0.0` / `5000`). |
 | `SECRET_KEY` | Flask session secret — set to any random string. |
 | `MAX_UPLOAD_MB` | Max upload size per request in MB (default `1024`). |
@@ -55,6 +60,8 @@ will pick them up on its next scheduled scan (or a manual scan).
 - Series names are sanitized (path separators and invalid filesystem
   characters removed) and path traversal is blocked.
 - Files that already exist in the target folder are skipped, never overwritten.
+- App links are used as given, so point them at addresses reachable from the
+  device you browse from — `localhost` will not resolve from your phone.
 - The app has no authentication — keep it on your LAN or put it behind a
   reverse proxy with auth if you expose it.
 
