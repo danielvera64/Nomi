@@ -76,6 +76,67 @@ def allowed_file(filename: str) -> bool:
     return any(lower.endswith("." + ext) for ext in ALLOWED_EXTENSIONS)
 
 
+_NUMBER = r"(\d+(?:\.\d+)?)"
+# A marker starts a word only if no letter/digit precedes it. \b is not enough:
+# '_' is a word character, so \b never fires in names like 'naruto_v05'.
+_START = r"(?<![A-Za-z0-9])"
+_GAP = r"[\s_\-]*"
+VOLUME_RE = re.compile(rf"{_START}(?:v|vol|volume|tomo)\.?{_GAP}{_NUMBER}", re.IGNORECASE)
+CHAPTER_RE = re.compile(
+    rf"(?:{_START}(?:c|ch|chap|chapter)\.?{_GAP}|#){_NUMBER}", re.IGNORECASE
+)
+TRAILING_NUMBER_RE = re.compile(rf"(?:^|[\s_\-.]){_NUMBER}\s*$")
+
+
+def pad_number(num: str, width: int) -> str:
+    """Zero-pad the integer part of a number string ('7' -> '007', '12.5' -> '012.5')."""
+    whole, _, frac = num.partition(".")
+    padded = whole.zfill(width)
+    return f"{padded}.{frac}" if frac else padded
+
+
+def kavita_filename(series: str, original: str, year: str | None) -> tuple[str, bool]:
+    """Build a filename following Kavita's naming convention.
+
+    Detects a volume and/or chapter number in the original filename and
+    produces e.g. 'Series v01.cbz', 'Series Ch. 003.cbz', 'Series 001 (2020).cbz'.
+    Returns (new_filename, numbered) — numbered is False when no volume,
+    chapter, or trailing number could be found (likely a one-shot).
+    """
+    original = sanitize_filename(original)
+    stem, dot, ext = original.rpartition(".")
+    if not dot:
+        stem, ext = original, ""
+
+    volume = VOLUME_RE.search(stem)
+    chapter = CHAPTER_RE.search(stem)
+    parts = [series]
+    if volume:
+        parts.append("v" + pad_number(volume.group(1), 2))
+    if chapter:
+        parts.append("Ch. " + pad_number(chapter.group(1), 3))
+
+    trailing = None
+    if not chapter:
+        # No chapter marker — fall back to a trailing issue number. The volume
+        # match is cut out first so 'Batman v2 015' keeps its issue number and
+        # 'Nana Vol.2' does not read its own volume number twice. A '(year)'
+        # group that may follow the issue number is ignored.
+        bare = stem[: volume.start()] + " " + stem[volume.end() :] if volume else stem
+        bare = re.sub(r"\(\d{4}\)", "", bare).strip()
+        trailing = TRAILING_NUMBER_RE.search(bare)
+        if trailing:
+            parts.append(pad_number(trailing.group(1), 3))
+
+    # Nothing numbered it — likely a one-shot.
+    numbered = bool(volume or chapter or trailing)
+    if year:
+        parts.append(f"({year})")
+
+    new_stem = " ".join(parts)
+    return (f"{new_stem}.{ext}" if ext else new_stem, numbered)
+
+
 def existing_series(library_root: Path) -> list[str]:
     if not library_root.is_dir():
         return []
@@ -124,8 +185,12 @@ def index():
 def upload():
     library_name = request.form.get("library", "")
     series_name = sanitize_series_name(request.form.get("series", ""))
+    year = request.form.get("year", "").strip()
     files = [f for f in request.files.getlist("files") if f and f.filename]
 
+    if year and not re.fullmatch(r"\d{4}", year):
+        flash("Year must be a 4-digit number.", "error")
+        return redirect(url_for("index"))
     if library_name not in LIBRARIES:
         flash("Please choose a valid library.", "error")
         return redirect(url_for("index"))
@@ -147,14 +212,22 @@ def upload():
         flash("Invalid series name.", "error")
         return redirect(url_for("index"))
 
+    is_new_series = not series_dir.exists()
+    if not is_new_series:
+        year = ""  # the year only applies to brand-new series
     series_dir.mkdir(parents=True, exist_ok=True)
 
     saved, skipped = [], []
     for file in files:
-        filename = sanitize_filename(file.filename)
-        if not filename or not allowed_file(filename):
+        original = sanitize_filename(file.filename)
+        if not original or not allowed_file(original):
             skipped.append(f"{file.filename} (file type not allowed)")
             continue
+        filename, numbered = kavita_filename(series_name, original, year)
+        if not numbered and len(files) > 1:
+            # No volume/chapter/issue number found — with several files a
+            # shared one-shot name would collide, so keep the original name.
+            filename = original
         destination = series_dir / filename
         if destination.resolve().parent != series_dir.resolve():
             skipped.append(f"{file.filename} (invalid filename)")
@@ -163,7 +236,7 @@ def upload():
             skipped.append(f"{filename} (already exists)")
             continue
         file.save(destination)
-        saved.append(filename)
+        saved.append(filename if filename == original else f"{original} → {filename}")
 
     if saved:
         flash(

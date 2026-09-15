@@ -39,7 +39,7 @@
     h1 { margin: 0 0 .25rem; font-size: 1.4rem; }
     p.subtitle { margin: 0 0 1.5rem; color: var(--muted); font-size: .9rem; }
     label { display: block; margin: 1rem 0 .35rem; font-weight: 600; font-size: .9rem; }
-    select, input[type="text"] {
+    select, input[type="text"], input[type="number"] {
       width: 100%;
       padding: .6rem .7rem;
       border-radius: 8px;
@@ -90,12 +90,23 @@
       padding: .1rem .6rem;
       margin-bottom: 1rem;
     }
+    @media (max-width: 480px) {
+      body { padding: 0; }
+      .card {
+        max-width: none;
+        min-height: 100vh;
+        border: none;
+        border-radius: 0;
+        padding: 1.25rem 1rem;
+      }
+      .dropzone { padding: 1.1rem .75rem; }
+    }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>📚 Nomi</h1>
-    <p class="subtitle">Upload comics &amp; manga straight into your Kavita library folders.</p>
+    <p class="subtitle">Upload comics, manga &amp; books straight into your Kavita library folders.</p>
 
     {% if kavita_scan_enabled %}
       <span class="badge">Auto-scan enabled</span>
@@ -111,8 +122,8 @@
       <label for="library">Library</label>
       <select name="library" id="library" required>
         <option value="" disabled {{ 'selected' if libraries|length != 1 }}>Choose a library…</option>
-        {% for name, path in libraries.items() %}
-          <option value="{{ name }}" {{ 'selected' if libraries|length == 1 }}>{{ name }} — {{ path }}</option>
+        {% for name in libraries %}
+          <option value="{{ name }}" {{ 'selected' if libraries|length == 1 }}>{{ name }}</option>
         {% endfor %}
       </select>
 
@@ -121,6 +132,13 @@
              placeholder="e.g. One Piece" autocomplete="off" required>
       <datalist id="series-options"></datalist>
       <p class="hint">Pick an existing series to add to its folder, or type a new name to create one.</p>
+
+      <div id="year-wrap" hidden>
+        <label for="year">Year</label>
+        <input type="number" name="year" id="year" inputmode="numeric"
+               min="1900" max="2100" step="1" placeholder="e.g. 2020">
+        <p class="hint">Optional — first release year of this new series, added to filenames as “(Year)”.</p>
+      </div>
 
       <label>Files</label>
       <div class="dropzone" id="dropzone">
@@ -153,8 +171,23 @@
         seriesOptions.appendChild(opt);
       });
     }
-    librarySelect.addEventListener('change', refreshSeriesOptions);
+    const seriesInput = document.getElementById('series');
+    const yearWrap = document.getElementById('year-wrap');
+    const yearInput = document.getElementById('year');
+
+    function toggleYearField() {
+      const value = seriesInput.value.trim().toLowerCase();
+      const existing = (seriesByLibrary[librarySelect.value] || [])
+        .some(name => name.toLowerCase() === value);
+      const isNew = value !== '' && !existing;
+      yearWrap.hidden = !isNew;
+      if (!isNew) yearInput.value = '';
+    }
+    seriesInput.addEventListener('input', toggleYearField);
+
+    librarySelect.addEventListener('change', () => { refreshSeriesOptions(); toggleYearField(); });
     refreshSeriesOptions();
+    toggleYearField();
 
     function showFiles() {
       fileList.innerHTML = '';

@@ -1,8 +1,8 @@
 # Nomi
 
-Nomi is a small Flask web app for uploading comics and manga into a self-hosted
-[Kavita](https://www.kavitareader.com/) library. Files are stored in the layout
-Kavita expects:
+Nomi is a small Flask web app for uploading comics, manga, and books into a
+self-hosted [Kavita](https://www.kavitareader.com/) library. Files are stored
+in the layout Kavita expects:
 
 ```
 <Library Root>/
@@ -13,7 +13,15 @@ Kavita expects:
 
 The app creates the series folder if it doesn't exist, or adds files to it if
 it does. Existing series are suggested as you type so you don't create
-duplicate folders.
+duplicate folders. The UI is mobile-friendly, so you can upload from a phone.
+
+Uploaded files are renamed to Kavita's naming convention. The volume, chapter,
+or issue number is detected in the original filename and the file is renamed
+to `<Series> v01.cbz`, `<Series> Ch. 003.cbz`, or `<Series> 001.cbz`. When you
+create a new series you can optionally give its first release year, which is
+appended as `<Series> 001 (2020).cbz`. A file with no detectable number is
+treated as a one-shot and named after the series (original name is kept if
+several such files are uploaded together, to avoid collisions).
 
 ## Setup
 
@@ -32,7 +40,7 @@ Open http://localhost:5000 in your browser.
 
 | Variable | Description |
 | --- | --- |
-| `LIBRARY_<NAME>` | One per library: root path of that Kavita library (e.g. `LIBRARY_MANGA=/data/manga`). Add as many as you need. |
+| `LIBRARY_<NAME>` | One per library: root path of that Kavita library (e.g. `LIBRARY_MANGA=/data/manga`, `LIBRARY_BOOKS=/data/books`). Add as many as you need. |
 | `HOST` / `PORT` | Where the app listens (defaults: `0.0.0.0` / `5000`). |
 | `SECRET_KEY` | Flask session secret — set to any random string. |
 | `MAX_UPLOAD_MB` | Max upload size per request in MB (default `1024`). |
