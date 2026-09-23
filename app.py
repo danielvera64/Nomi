@@ -16,7 +16,9 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, flash, redirect, render_template, request, url_for
+from flask import Flask, abort, flash, redirect, render_template, request, send_from_directory, url_for
+
+from zimage_generator import ZImageGenerator
 
 load_dotenv()
 
@@ -33,6 +35,14 @@ ALLOWED_EXTENSIONS = {
 # Kavita API (optional): if set, a library scan is triggered after each upload.
 KAVITA_URL = os.getenv("KAVITA_URL", "").rstrip("/")
 KAVITA_API_KEY = os.getenv("KAVITA_API_KEY", "")
+
+# ComfyUI (media content generator): base URL of a running ComfyUI server,
+# and an optional path to the workflow JSON (defaults to the bundled one).
+COMFYUI_URL = os.getenv("COMFYUI_URL", "").rstrip("/")
+COMFYUI_WORKFLOW = os.getenv("COMFYUI_WORKFLOW", "").strip()
+# Local folder where the ComfyUI server saves generated images, used for the
+# download button.
+COMFYUI_OUTPUT_DIR = Path(os.getenv("COMFYUI_OUTPUT_DIR", "~/ComfyUI/output")).expanduser()
 
 
 def load_libraries() -> dict[str, Path]:
@@ -229,6 +239,48 @@ def uploader():
         allowed_extensions=sorted(ALLOWED_EXTENSIONS),
         kavita_scan_enabled=bool(KAVITA_URL and KAVITA_API_KEY),
     )
+
+
+@app.route("/media", methods=["GET", "POST"])
+def media_generator():
+    """Media content generator: generate AI images via the ComfyUI server."""
+    images: list[dict] = []
+    prompt = ""
+    if request.method == "POST":
+        prompt = request.form.get("prompt", "").strip()
+        if not prompt:
+            flash("Please enter a prompt.", "error")
+        elif not COMFYUI_URL:
+            flash("ComfyUI is not configured — set COMFYUI_URL in your .env file.", "error")
+        else:
+            generator = ZImageGenerator(base_url=COMFYUI_URL, workflow_path=COMFYUI_WORKFLOW or None)
+            try:
+                results = generator.generate(prompt)
+                images = [
+                    {**image, "view_url": generator.view_url(generator.base_url, image)}
+                    for image in results
+                ]
+                if not images:
+                    flash("Generation finished but no images were returned.", "error")
+            except Exception as exc:
+                flash(f"Image generation failed: {exc}", "error")
+    return render_template(
+        "media.html",
+        images=images,
+        prompt=prompt,
+        configured=bool(COMFYUI_URL),
+    )
+
+
+@app.route("/media/download")
+def media_download():
+    """Serve a generated image from ComfyUI's local output folder."""
+    filename = request.args.get("filename", "")
+    subfolder = request.args.get("subfolder", "")
+    if not filename or not COMFYUI_OUTPUT_DIR.is_dir():
+        abort(404)
+    path = "/".join(part for part in (subfolder, filename) if part)
+    return send_from_directory(COMFYUI_OUTPUT_DIR, path, as_attachment=True)
 
 
 @app.route("/upload", methods=["POST"])

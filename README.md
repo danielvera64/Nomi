@@ -51,6 +51,9 @@ Open http://localhost:5000 in your browser.
 | `MAX_UPLOAD_MB` | Max upload size per request in MB (default `1024`). |
 | `ALLOWED_EXTENSIONS` | Comma-separated list of accepted extensions. |
 | `KAVITA_URL` / `KAVITA_API_KEY` | Optional. If both are set, the app triggers a Kavita library scan after each upload (API key: Kavita → Settings → Account → API Key). |
+| `COMFYUI_URL` | Optional. Base URL of a running ComfyUI server (e.g. `http://nas:8188`). Enables the media content generator on the home page. |
+| `COMFYUI_WORKFLOW` | Optional. Path to a ComfyUI API workflow JSON (defaults to the bundled `workflows/ZImageTurbo-Workflow-API.json`). |
+| `COMFYUI_OUTPUT_DIR` | Optional. Local folder where ComfyUI saves generated images; used by the download button (default `~/ComfyUI/output`). |
 
 Without the Kavita API settings, files are still stored correctly and Kavita
 will pick them up on its next scheduled scan (or a manual scan).
