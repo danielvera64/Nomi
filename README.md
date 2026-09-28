@@ -54,8 +54,8 @@ Open http://localhost:5000 in your browser.
 | `COMFYUI_URL` | Optional. Base URL of a running ComfyUI server (e.g. `http://nas:8188`). Enables the media content generator on the home page. |
 | `COMFYUI_WORKFLOW` | Optional. Path to a ComfyUI API workflow JSON (defaults to the bundled `workflows/ZImageTurbo-Workflow-API.json`). |
 | `COMFYUI_OUTPUT_DIR` | Optional. Local folder where ComfyUI saves generated images; used by the download button (default `~/ComfyUI/output`). |
-
-Without the Kavita API settings, files are still stored correctly and Kavita
+| `NIM_VISION_MODEL` | Optional. Vision model to use for generating prompts from images (default `meta/llama-3.2-90b-vision-instruct`).
+| `NVIDIA_API_KEY` | Optional. NVIDIA API key for accessing NIM models.
 will pick them up on its next scheduled scan (or a manual scan).
 
 ## Notes

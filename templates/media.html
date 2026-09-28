@@ -3,6 +3,13 @@
 {% block title %}Media content generator · Nomi{% endblock %}
 
 {% block styles %}
+    @media (min-width: 481px) {
+      .card {
+        width: 70%;
+        max-width: 70%;
+        min-height: calc(100vh - 4rem);
+      }
+    }
     label { display: block; margin: 1rem 0 .35rem; font-weight: 600; font-size: .9rem; }
     textarea {
       width: 100%;
@@ -17,9 +24,21 @@
       font-family: inherit;
     }
     textarea:focus { outline: 2px solid var(--accent); border-color: transparent; }
-    button {
-      margin-top: 1rem;
+    input[type="file"] {
       width: 100%;
+      padding: .6rem .7rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+    .button-group {
+      display: flex;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+    .button-group button {
+      flex: 1;
       padding: .75rem;
       border: none;
       border-radius: 8px;
@@ -29,8 +48,8 @@
       font-weight: 700;
       cursor: pointer;
     }
-    button:hover { background: var(--accent-hover); }
-    button:disabled { opacity: .5; cursor: not-allowed; }
+    .button-group button:hover { background: var(--accent-hover); }
+    .button-group button:disabled { opacity: .5; cursor: not-allowed; }
     .results { margin-top: 1.5rem; }
     .results img {
       width: 100%;
@@ -52,6 +71,8 @@
     }
     .results .download:hover { background: rgba(79, 195, 161, .1); }
     .results .hint { margin-bottom: 0; }
+    .image-preview { margin-top: 1rem; text-align: center; }
+    .image-preview img { border-radius: 8px; border: 1px solid var(--border); max-width: 100%; height: auto; }
 {% endblock %}
 
 {% block content %}
@@ -69,11 +90,21 @@
     {% endfor %}
   {% endwith %}
 
-  <form method="post" action="{{ url_for('media_generator') }}" id="generate-form">
+  <form method="post" action="{{ url_for('media_generator') }}" enctype="multipart/form-data" id="generate-form">
+    <div>
+      <label for="image_file">Upload Image (for prompt generation)</label>
+      <input type="file" name="image_file" id="image_file" accept="image/*">
+    </div>
     <label for="prompt">Prompt</label>
-    <textarea name="prompt" id="prompt" placeholder="Describe the image you want to generate…" required>{{ prompt }}</textarea>
-    <p class="hint">Generation can take a while — keep this tab open until the image appears.</p>
-    <button type="submit" id="submit-btn" {{ 'disabled' if not configured }}>Generate</button>
+    <textarea name="prompt" id="prompt" placeholder="Describe the image you want to generate…">{{ prompt }}</textarea>
+    <div class="button-group">
+      <button type="submit" name="generate_prompt" value="1" {% if not nim_configured %}disabled{% endif %}>🖼️ Generate prompt from image</button>
+      <button type="submit" name="generate_image" value="1" {% if not configured %}disabled{% endif %}>🎨 Generate image from prompt</button>
+    </div>
+    <p class="hint">Generate a prompt from an uploaded image, then use that prompt to create an image. Or directly generate an image from a text prompt.</p>
+    <div id="progress" style="display:none; margin-top:1rem; color:var(--accent); font-weight:600;">
+      Generating...
+    </div>
   </form>
 
   {% if images %}
@@ -89,12 +120,11 @@
 {% endblock %}
 
 {% block scripts %}
-<script>
-  const form = document.getElementById('generate-form');
-  const submitBtn = document.getElementById('submit-btn');
-  form.addEventListener('submit', () => {
-    submitBtn.disabled = true;
-    submitBtn.textContent = 'Generating…';
-  });
-</script>
+  <script>
+    const form = document.getElementById('generate-form');
+    const progressDiv = document.getElementById('progress');
+    form.addEventListener('submit', () => {
+      progressDiv.style.display = 'block';
+    });
+  </script>
 {% endblock %}

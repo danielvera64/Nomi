@@ -16,7 +16,21 @@ from pathlib import Path
 
 import requests
 from dotenv import load_dotenv
-from flask import Flask, abort, flash, redirect, render_template, request, send_from_directory, url_for
+from flask import (
+    Flask,
+    abort,
+    flash,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    url_for,
+)
+
+import base64
+import tempfile
+from langchain_nvidia_ai_endpoints import ChatNVIDIA
+from langchain_core.messages import HumanMessage
 
 from zimage_generator import ZImageGenerator
 
@@ -28,7 +42,9 @@ app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "1024")) * 102
 
 ALLOWED_EXTENSIONS = {
     ext.strip().lower().lstrip(".")
-    for ext in os.getenv("ALLOWED_EXTENSIONS", "cbz,cbr,cb7,cbt,zip,rar,7z,tar.gz,pdf,epub").split(",")
+    for ext in os.getenv(
+        "ALLOWED_EXTENSIONS", "cbz,cbr,cb7,cbt,zip,rar,7z,tar.gz,pdf,epub"
+    ).split(",")
     if ext.strip()
 }
 
@@ -40,9 +56,50 @@ KAVITA_API_KEY = os.getenv("KAVITA_API_KEY", "")
 # and an optional path to the workflow JSON (defaults to the bundled one).
 COMFYUI_URL = os.getenv("COMFYUI_URL", "").rstrip("/")
 COMFYUI_WORKFLOW = os.getenv("COMFYUI_WORKFLOW", "").strip()
+# NVIDIA NIM (image-to-prompt) configuration
+NIM_VISION_MODEL = os.getenv("NIM_VISION_MODEL", "meta/llama-3.2-11b-vision-instruct")
+NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
 # Local folder where the ComfyUI server saves generated images, used for the
 # download button.
-COMFYUI_OUTPUT_DIR = Path(os.getenv("COMFYUI_OUTPUT_DIR", "~/ComfyUI/output")).expanduser()
+COMFYUI_OUTPUT_DIR = Path(
+    os.getenv("COMFYUI_OUTPUT_DIR", "~/ComfyUI/output")
+).expanduser()
+
+
+def _get_prompt_from_image(image_path: str) -> str:
+    """Generate a text prompt from an image using NVIDIA NIM vision model.
+    Requires NVIDIA_API_KEY to be set.
+    """
+    if not NVIDIA_API_KEY:
+        raise RuntimeError("NVIDIA_API_KEY not set")
+    # Initialize the model (can be cached globally, but fine per call)
+    llm = ChatNVIDIA(model=NIM_VISION_MODEL)
+    # Read and encode image
+    with open(image_path, "rb") as img_file:
+        base64_image = base64.b64encode(img_file.read()).decode("utf-8")
+    result = llm.invoke(
+        [
+            HumanMessage(
+                content=[
+                    {
+                        "type": "text",
+                        "text": """
+                 Create a prompt to replicate this image. 
+                 Describe the scene, objects, style, and layout but do not mention the medium or that it is an image/photo.
+                 Describe the person age and gender but don't include any information about the how the person looks.
+                 Omit words like \"photo of\" or \"image of\" or \"create an image of\".
+                 Not longer than 2 paragraphs. Omit titles
+                 """,
+                    },
+                    {
+                        "type": "image_url",
+                        "image_url": {"url": f"data:image/png;base64,{base64_image}"},
+                    },
+                ]
+            )
+        ]
+    )
+    return result.content.strip()
 
 
 def load_libraries() -> dict[str, Path]:
@@ -53,7 +110,7 @@ def load_libraries() -> dict[str, Path]:
     libraries = {}
     for key, value in os.environ.items():
         if key.startswith("LIBRARY_") and value.strip():
-            name = key[len("LIBRARY_"):].replace("_", " ").strip().title()
+            name = key[len("LIBRARY_") :].replace("_", " ").strip().title()
             libraries[name] = Path(value.strip()).expanduser()
     return libraries
 
@@ -97,7 +154,7 @@ def load_apps() -> dict[str, str]:
             continue
         else:
             url = "http://" + url
-        name = key[len("APP_"):].replace("_", " ").strip().title()
+        name = key[len("APP_") :].replace("_", " ").strip().title()
         apps[name] = url
     return dict(sorted(apps.items(), key=lambda item: item[0].casefold()))
 
@@ -135,7 +192,9 @@ _NUMBER = r"(\d+(?:\.\d+)?)"
 # '_' is a word character, so \b never fires in names like 'naruto_v05'.
 _START = r"(?<![A-Za-z0-9])"
 _GAP = r"[\s_\-]*"
-VOLUME_RE = re.compile(rf"{_START}(?:v|vol|volume|tomo)\.?{_GAP}{_NUMBER}", re.IGNORECASE)
+VOLUME_RE = re.compile(
+    rf"{_START}(?:v|vol|volume|tomo)\.?{_GAP}{_NUMBER}", re.IGNORECASE
+)
 CHAPTER_RE = re.compile(
     rf"(?:{_START}(?:c|ch|chap|chapter)\.?{_GAP}|#){_NUMBER}", re.IGNORECASE
 )
@@ -195,7 +254,11 @@ def existing_series(library_root: Path) -> list[str]:
     if not library_root.is_dir():
         return []
     return sorted(
-        (p.name for p in library_root.iterdir() if p.is_dir() and not p.name.startswith(".")),
+        (
+            p.name
+            for p in library_root.iterdir()
+            if p.is_dir() and not p.name.startswith(".")
+        ),
         key=str.casefold,
     )
 
@@ -226,12 +289,16 @@ def trigger_kavita_scan() -> str | None:
 @app.route("/", methods=["GET"])
 def index():
     """Launcher: the uploader plus links to other self-hosted apps."""
-    return render_template("home.html", external_apps=EXTERNAL_APPS, app_icons=APP_ICONS)
+    return render_template(
+        "home.html", external_apps=EXTERNAL_APPS, app_icons=APP_ICONS
+    )
 
 
 @app.route("/uploader", methods=["GET"])
 def uploader():
-    series_by_library = {name: existing_series(root) for name, root in LIBRARIES.items()}
+    series_by_library = {
+        name: existing_series(root) for name, root in LIBRARIES.items()
+    }
     return render_template(
         "uploader.html",
         libraries=LIBRARIES,
@@ -246,29 +313,70 @@ def media_generator():
     """Media content generator: generate AI images via the ComfyUI server."""
     images: list[dict] = []
     prompt = ""
+    uploaded_image_b64 = None
     if request.method == "POST":
-        prompt = request.form.get("prompt", "").strip()
-        if not prompt:
-            flash("Please enter a prompt.", "error")
-        elif not COMFYUI_URL:
-            flash("ComfyUI is not configured — set COMFYUI_URL in your .env file.", "error")
-        else:
-            generator = ZImageGenerator(base_url=COMFYUI_URL, workflow_path=COMFYUI_WORKFLOW or None)
-            try:
-                results = generator.generate(prompt)
-                images = [
-                    {**image, "view_url": generator.view_url(generator.base_url, image)}
-                    for image in results
-                ]
-                if not images:
-                    flash("Generation finished but no images were returned.", "error")
-            except Exception as exc:
-                flash(f"Image generation failed: {exc}", "error")
+        if request.form.get("generate_prompt"):
+            image_file = request.files.get("image_file")
+            if image_file and image_file.filename:
+                # Save uploaded image to a temporary file
+                tmp_path = None
+                try:
+                    with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+                        image_file.save(tmp.name)
+                        tmp_path = tmp.name
+                    try:
+                        prompt = _get_prompt_from_image(tmp_path)
+                    except Exception as exc:
+                        flash(f"Failed to generate prompt from image: {exc}", "error")
+                        prompt = ""
+                    with open(tmp_path, "rb") as f:
+                        uploaded_image_b64 = base64.b64encode(f.read()).decode("utf-8")
+                except Exception as exc:
+                    flash(f"Error processing image: {exc}", "error")
+                finally:
+                    if tmp_path:
+                        try:
+                            os.unlink(tmp_path)
+                        except OSError:
+                            pass
+            else:
+                flash("Please upload an image to generate a prompt.", "error")
+        elif request.form.get("generate_image"):
+            prompt = request.form.get("prompt", "").strip()
+            if not prompt:
+                flash("Please enter a prompt to generate an image.", "error")
+            elif not COMFYUI_URL:
+                flash(
+                    "ComfyUI is not configured — set COMFYUI_URL in your .env file.",
+                    "error",
+                )
+            else:
+                generator = ZImageGenerator(
+                    base_url=COMFYUI_URL, workflow_path=COMFYUI_WORKFLOW or None
+                )
+                try:
+                    results = generator.generate(prompt)
+                    images = [
+                        {
+                            **image,
+                            "view_url": generator.view_url(generator.base_url, image),
+                        }
+                        for image in results
+                    ]
+                    if not images:
+                        flash(
+                            "Generation finished but no images were returned.", "error"
+                        )
+                except Exception as exc:
+                    flash(f"Image generation failed: {exc}", "error")
+        # If neither button pressed, do nothing (just redisplay)
     return render_template(
         "media.html",
         images=images,
         prompt=prompt,
+        uploaded_image_b64=uploaded_image_b64,
         configured=bool(COMFYUI_URL),
+        nim_configured=bool(NVIDIA_API_KEY),
     )
 
 
