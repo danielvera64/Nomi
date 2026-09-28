@@ -32,11 +32,11 @@ import tempfile
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import HumanMessage
 
-from zimage_generator import ZImageGenerator
+from src.zimage_generator import ZImageGenerator
 
 load_dotenv()
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='src/templates')
 app.secret_key = os.getenv("SECRET_KEY", "change-me")
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "1024")) * 1024 * 1024
 

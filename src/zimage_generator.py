@@ -20,7 +20,7 @@ import websocket
 
 class ZImageGenerator:
     DEFAULT_BASE_URL = "http://127.0.0.1:8188"
-    DEFAULT_WORKFLOW = Path(__file__).resolve().parent / "workflows" / "ZImageTurbo-Workflow-API.json"
+    DEFAULT_WORKFLOW = Path(__file__).resolve().parent.parent / "workflows" / "ZImageTurbo-Workflow-API.json"
 
     def __init__(
         self,
