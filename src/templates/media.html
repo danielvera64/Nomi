@@ -74,11 +74,27 @@
     .results .hint { margin-bottom: 0; }
     .image-preview { margin-top: 1rem; text-align: center; }
     .image-preview img { border-radius: 8px; border: 1px solid var(--border); max-width: 100%; height: auto; }
+    .tabs { display: flex; gap: .5rem; margin-bottom: 1rem; }
+    .tabs button {
+      flex: 1;
+      padding: .5rem .75rem;
+      border: none;
+      border-bottom: 2px solid transparent;
+      background: var(--bg);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .tabs button.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      font-weight: 600;
+    }
+    .hidden { display: none; }
 {% endblock %}
 
 {% block content %}
   <a class="back-link" href="{{ url_for('index') }}">← Home</a>
-  <h1>🎨 Media content generator</h1>
+  <h1 id="page-title">🎨 Media content generator</h1>
   <p class="subtitle">Generate AI images with your ComfyUI server.</p>
 
   {% if not configured %}
@@ -91,18 +107,32 @@
     {% endfor %}
   {% endwith %}
 
+  <div class="tabs" id="mode-tabs">
+    <button class="tab active" data-target="image-to-prompt" type="button">🖼️ Image → Prompt</button>
+    <button class="tab" data-target="prompt-to-image" type="button">🎨 Prompt → Image</button>
+  </div>
+
   <form method="post" action="{{ url_for('media_generator') }}" enctype="multipart/form-data" id="generate-form">
-    <div>
-      <label for="image_file">Upload Image (for prompt generation)</label>
-      <input type="file" name="image_file" id="image_file" accept="image/*">
+    <section id="section-image-to-prompt" class="tab-content active">
+      <div>
+        <label for="image_file">Upload Image</label>
+        <input type="file" name="image_file" id="image_file" accept="image/*">
+      </div>
+      <label for="prompt">Prompt</label>
+      <textarea name="prompt" id="prompt" placeholder="Prompt will appear here…" readonly>{{ prompt }}</textarea>
+    </section>
+
+    <section id="section-prompt-to-image" class="tab-content">
+      <label for="prompt">Prompt</label>
+      <textarea name="prompt" id="prompt" placeholder="Describe the image you want to generate…">{{ prompt }}</textarea>
+    </section>
+
+    <div class="button-group" id="button-group">
+      <button type="submit" id="generate-button" value="1">🖼️ Generate prompt from image</button>
     </div>
-    <label for="prompt">Prompt</label>
-    <textarea name="prompt" id="prompt" placeholder="Describe the image you want to generate…">{{ prompt }}</textarea>
-    <div class="button-group">
-      <button type="submit" name="generate_prompt" value="1" {% if not nim_configured %}disabled{% endif %}>🖼️ Generate prompt from image</button>
-      <button type="submit" name="generate_image" value="1" {% if not configured %}disabled{% endif %}>🎨 Generate image from prompt</button>
-    </div>
-    <p class="hint">Generate a prompt from an uploaded image, then use that prompt to create an image. Or directly generate an image from a text prompt.</p>
+
+    <p class="hint" id="hint-text">Upload an image to get a text prompt describing it.</p>
+
     <div id="progress" style="display:none; margin-top:1rem; color:var(--accent); font-weight:600;">
       Generating...
     </div>
@@ -124,6 +154,52 @@
   <script>
     const form = document.getElementById('generate-form');
     const progressDiv = document.getElementById('progress');
+    const imageToPromptSection = document.getElementById('section-image-to-prompt');
+    const promptToImageSection = document.getElementById('section-prompt-to-image');
+    const generateButton = document.getElementById('generate-button');
+    const pageTitle = document.getElementById('page-title');
+    const hintText = document.getElementById('hint-text');
+    const tabs = document.querySelectorAll('#mode-tabs button');
+
+    function updateUIForTab(target) {
+      // Update tab activation
+      tabs.forEach(t => t.classList.remove('active'));
+      const activeTab = document.querySelector(`#mode-tabs button[data-target="${target}"]`);
+      if (activeTab) activeTab.classList.add('active');
+
+      // Show/hide sections
+      if (target === 'image-to-prompt') {
+        imageToPromptSection.classList.remove('hidden');
+        promptToImageSection.classList.add('hidden');
+        // Set button to generate prompt
+        generateButton.name = 'generate_prompt';
+        generateButton.textContent = '🖼️ Generate prompt from image';
+        generateButton.disabled = !!{{ 'true' if not nim_configured else 'false' }};
+        // Update hint and page title
+        hintText.textContent = 'Upload an image to get a text prompt describing it.';
+        pageTitle.textContent = '🎨 Media content generator – Image → Prompt';
+      } else {
+        imageToPromptSection.classList.add('hidden');
+        promptToImageSection.classList.remove('hidden');
+        // Set button to generate image
+        generateButton.name = 'generate_image';
+        generateButton.textContent = '🎨 Generate image from prompt';
+        generateButton.disabled = !!{{ 'true' if not configured else 'false' }};
+        // Update hint and page title
+        hintText.textContent = 'Enter a prompt to generate an image.';
+        pageTitle.textContent = '🎨 Media content generator – Prompt → Image';
+      }
+    }
+
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => {
+        updateUIForTab(tab.dataset.target);
+      });
+    });
+
+    // Initialize UI based on default tab (image-to-prompt)
+    updateUIForTab('image-to-prompt');
+
     form.addEventListener('submit', () => {
       progressDiv.style.display = 'block';
     });

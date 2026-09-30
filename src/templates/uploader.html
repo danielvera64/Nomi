@@ -50,7 +50,7 @@
 {% block content %}
   <a class="back-link" href="{{ url_for('index') }}">← Home</a>
   <h1>📤 Uploader</h1>
-  <p class="subtitle">Upload comics, manga &amp; books straight into your Kavita library folders.</p>
+  <p class="subtitle">Upload comics, manga & books straight into your Kavita library folders.</p>
 
   {% if kavita_scan_enabled %}
     <span class="badge">Auto-scan enabled</span>
@@ -72,10 +72,16 @@
     </select>
 
     <label for="series">Series</label>
-    <input type="text" name="series" id="series" list="series-options"
-           placeholder="e.g. One Piece" autocomplete="off" required>
-    <datalist id="series-options"></datalist>
-    <p class="hint">Pick an existing series to add to its folder, or type a new name to create one.</p>
+    <select name="series-select" id="series-select" required>
+      <option value="" disabled selected>Choose a series…</option>
+    </select>
+    <input type="text" id="series-new" placeholder="New series name" autocomplete="off">
+    <input type="hidden" name="series" id="series-input">
+    <p class="hint">Pick an existing series to add to its folder, or choose “New series” to type a custom name.</p>
+    <label for="chapter">Chapter</label>
+    <input type="number" name="chapter" id="chapter" inputmode="numeric"
+           min="0" step="1" placeholder="e.g. 24">
+    <p class="hint">Optional — chapter number for comics, or leave blank for books.</p>
 
     <div id="year-wrap" hidden>
       <label for="year">Year</label>
@@ -88,7 +94,7 @@
     <div class="dropzone" id="dropzone">
       <input type="file" name="files" id="files" multiple
              accept="{% for ext in allowed_extensions %}.{{ ext }}{{ ',' if not loop.last }}{% endfor %}">
-      <span id="dropzone-text">Drag &amp; drop files here, or click to browse</span>
+      <span id="dropzone-text">Drag & drop files here, or click to browse</span>
       <ul class="file-list" id="file-list"></ul>
     </div>
     <p class="hint">Allowed: {{ allowed_extensions | join(', ') }}</p>
@@ -101,38 +107,68 @@
 <script>
   const seriesByLibrary = {{ series_by_library | tojson }};
   const librarySelect = document.getElementById('library');
-  const seriesOptions = document.getElementById('series-options');
+  const seriesSelect = document.getElementById('series-select');
+  const seriesNewInput = document.getElementById('series-new');
+  const seriesInput = document.getElementById('series-input');
+  const yearWrap = document.getElementById('year-wrap');
+  const yearInput = document.getElementById('year');
   const dropzone = document.getElementById('dropzone');
   const fileInput = document.getElementById('files');
   const fileList = document.getElementById('file-list');
   const form = document.getElementById('upload-form');
   const submitBtn = document.getElementById('submit-btn');
 
-  function refreshSeriesOptions() {
-    seriesOptions.innerHTML = '';
-    (seriesByLibrary[librarySelect.value] || []).forEach(name => {
+  function populateSeriesSelect() {
+    const library = librarySelect.value;
+    const seriesList = seriesByLibrary[library] || [];
+    seriesSelect.innerHTML = '<option value="" disabled selected>Choose a series…</option>';
+    seriesList.forEach(name => {
       const opt = document.createElement('option');
       opt.value = name;
-      seriesOptions.appendChild(opt);
+      opt.textContent = name;
+      seriesSelect.appendChild(opt);
     });
+    const newOpt = document.createElement('option');
+    newOpt.value = '__new__';
+    newOpt.textContent = 'New series';
+    seriesSelect.appendChild(newOpt);
+    // Reset new series input
+    seriesNewInput.value = '';
+    seriesInput.value = '';
+    toggleSeriesFields();
   }
-  const seriesInput = document.getElementById('series');
-  const yearWrap = document.getElementById('year-wrap');
-  const yearInput = document.getElementById('year');
 
-  function toggleYearField() {
-    const value = seriesInput.value.trim().toLowerCase();
-    const existing = (seriesByLibrary[librarySelect.value] || [])
-      .some(name => name.toLowerCase() === value);
-    const isNew = value !== '' && !existing;
-    yearWrap.hidden = !isNew;
-    if (!isNew) yearInput.value = '';
+  function toggleSeriesFields() {
+    const val = seriesSelect.value;
+    if (val === '__new__') {
+      seriesNewInput.hidden = false;
+      yearWrap.hidden = false;
+      seriesNewInput.focus();
+      seriesInput.value = ''; // clear hidden series input
+    } else if (val) {
+      seriesNewInput.hidden = true;
+      yearWrap.hidden = true;
+      seriesNewInput.value = ''; // clear new series input
+      seriesInput.value = val; // set hidden series input to selected value
+    } else {
+      // No selection (placeholder)
+      seriesNewInput.hidden = true;
+      yearWrap.hidden = true;
+      seriesNewInput.value = '';
+      seriesInput.value = '';
+    }
   }
-  seriesInput.addEventListener('input', toggleYearField);
 
-  librarySelect.addEventListener('change', () => { refreshSeriesOptions(); toggleYearField(); });
-  refreshSeriesOptions();
-  toggleYearField();
+  librarySelect.addEventListener('change', () => {
+    populateSeriesSelect();
+  });
+
+  seriesSelect.addEventListener('change', () => {
+    toggleSeriesFields();
+  });
+
+  // Initial population
+  populateSeriesSelect();
 
   function showFiles() {
     fileList.innerHTML = '';
@@ -156,6 +192,10 @@
   });
 
   form.addEventListener('submit', () => {
+    // Ensure the hidden series input has the correct value before submitting
+    if (seriesSelect.value === '__new__') {
+      seriesInput.value = seriesNewInput.value.trim();
+    }
     submitBtn.disabled = true;
     submitBtn.textContent = 'Uploading…';
   });

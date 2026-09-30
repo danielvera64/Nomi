@@ -28,10 +28,12 @@ from flask import (
 )
 
 import base64
+from src.nim_client import NIMClient
 import tempfile
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import HumanMessage
 
+from src.kavita_uploader import KavitaUploader
 from src.zimage_generator import ZImageGenerator
 
 load_dotenv()
@@ -40,17 +42,8 @@ app = Flask(__name__, template_folder='src/templates')
 app.secret_key = os.getenv("SECRET_KEY", "change-me")
 app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "1024")) * 1024 * 1024
 
-ALLOWED_EXTENSIONS = {
-    ext.strip().lower().lstrip(".")
-    for ext in os.getenv(
-        "ALLOWED_EXTENSIONS", "cbz,cbr,cb7,cbt,zip,rar,7z,tar.gz,pdf,epub"
-    ).split(",")
-    if ext.strip()
-}
 
 # Kavita API (optional): if set, a library scan is triggered after each upload.
-KAVITA_URL = os.getenv("KAVITA_URL", "").rstrip("/")
-KAVITA_API_KEY = os.getenv("KAVITA_API_KEY", "")
 
 # ComfyUI (media content generator): base URL of a running ComfyUI server,
 # and an optional path to the workflow JSON (defaults to the bundled one).
@@ -66,56 +59,11 @@ COMFYUI_OUTPUT_DIR = Path(
 ).expanduser()
 
 
-def _get_prompt_from_image(image_path: str) -> str:
-    """Generate a text prompt from an image using NVIDIA NIM vision model.
-    Requires NVIDIA_API_KEY to be set.
-    """
-    if not NVIDIA_API_KEY:
-        raise RuntimeError("NVIDIA_API_KEY not set")
-    # Initialize the model (can be cached globally, but fine per call)
-    llm = ChatNVIDIA(model=NIM_VISION_MODEL)
-    # Read and encode image
-    with open(image_path, "rb") as img_file:
-        base64_image = base64.b64encode(img_file.read()).decode("utf-8")
-    result = llm.invoke(
-        [
-            HumanMessage(
-                content=[
-                    {
-                        "type": "text",
-                        "text": """
-                 Create a prompt to replicate this image. 
-                 Describe the scene, objects, style, and layout but do not mention the medium or that it is an image/photo.
-                 Describe the person age and gender but don't include any information about the how the person looks.
-                 Omit words like \"photo of\" or \"image of\" or \"create an image of\".
-                 Not longer than 2 paragraphs. Omit titles
-                 """,
-                    },
-                    {
-                        "type": "image_url",
-                        "image_url": {"url": f"data:image/png;base64,{base64_image}"},
-                    },
-                ]
-            )
-        ]
-    )
-    return result.content.strip()
 
 
-def load_libraries() -> dict[str, Path]:
-    """Read LIBRARY_<NAME>=<path> entries from the environment.
-
-    Example: LIBRARY_MANGA=/data/media/manga -> {"Manga": Path("/data/media/manga")}
-    """
-    libraries = {}
-    for key, value in os.environ.items():
-        if key.startswith("LIBRARY_") and value.strip():
-            name = key[len("LIBRARY_") :].replace("_", " ").strip().title()
-            libraries[name] = Path(value.strip()).expanduser()
-    return libraries
 
 
-LIBRARIES = load_libraries()
+
 
 
 # Emoji shown on the home page for apps we know by name; anything else gets a
@@ -162,130 +110,6 @@ def load_apps() -> dict[str, str]:
 EXTERNAL_APPS = load_apps()
 
 
-def sanitize_series_name(name: str) -> str:
-    """Make a series name safe to use as a single folder name."""
-    name = unicodedata.normalize("NFKC", name).strip()
-    # Strip path separators and characters invalid on common filesystems.
-    name = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "", name)
-    name = re.sub(r"\s+", " ", name).strip(" .")
-    return name
-
-
-def sanitize_filename(filename: str) -> str:
-    """Sanitize an uploaded filename, keeping spaces and unicode.
-
-    Unlike werkzeug's secure_filename, this preserves characters Kavita's
-    parser relies on (spaces, CJK titles) while still stripping any path
-    components and filesystem-invalid characters.
-    """
-    filename = os.path.basename(filename.replace("\\", "/"))
-    return sanitize_series_name(filename)
-
-
-def allowed_file(filename: str) -> bool:
-    lower = filename.lower()
-    return any(lower.endswith("." + ext) for ext in ALLOWED_EXTENSIONS)
-
-
-_NUMBER = r"(\d+(?:\.\d+)?)"
-# A marker starts a word only if no letter/digit precedes it. \b is not enough:
-# '_' is a word character, so \b never fires in names like 'naruto_v05'.
-_START = r"(?<![A-Za-z0-9])"
-_GAP = r"[\s_\-]*"
-VOLUME_RE = re.compile(
-    rf"{_START}(?:v|vol|volume|tomo)\.?{_GAP}{_NUMBER}", re.IGNORECASE
-)
-CHAPTER_RE = re.compile(
-    rf"(?:{_START}(?:c|ch|chap|chapter)\.?{_GAP}|#){_NUMBER}", re.IGNORECASE
-)
-TRAILING_NUMBER_RE = re.compile(rf"(?:^|[\s_\-.]){_NUMBER}\s*$")
-
-
-def pad_number(num: str, width: int) -> str:
-    """Zero-pad the integer part of a number string ('7' -> '007', '12.5' -> '012.5')."""
-    whole, _, frac = num.partition(".")
-    padded = whole.zfill(width)
-    return f"{padded}.{frac}" if frac else padded
-
-
-def kavita_filename(series: str, original: str, year: str | None) -> tuple[str, bool]:
-    """Build a filename following Kavita's naming convention.
-
-    Detects a volume and/or chapter number in the original filename and
-    produces e.g. 'Series v01.cbz', 'Series Ch. 003.cbz', 'Series 001 (2020).cbz'.
-    Returns (new_filename, numbered) — numbered is False when no volume,
-    chapter, or trailing number could be found (likely a one-shot).
-    """
-    original = sanitize_filename(original)
-    stem, dot, ext = original.rpartition(".")
-    if not dot:
-        stem, ext = original, ""
-
-    volume = VOLUME_RE.search(stem)
-    chapter = CHAPTER_RE.search(stem)
-    parts = [series]
-    if volume:
-        parts.append("v" + pad_number(volume.group(1), 2))
-    if chapter:
-        parts.append("Ch. " + pad_number(chapter.group(1), 3))
-
-    trailing = None
-    if not chapter:
-        # No chapter marker — fall back to a trailing issue number. The volume
-        # match is cut out first so 'Batman v2 015' keeps its issue number and
-        # 'Nana Vol.2' does not read its own volume number twice. A '(year)'
-        # group that may follow the issue number is ignored.
-        bare = stem[: volume.start()] + " " + stem[volume.end() :] if volume else stem
-        bare = re.sub(r"\(\d{4}\)", "", bare).strip()
-        trailing = TRAILING_NUMBER_RE.search(bare)
-        if trailing:
-            parts.append(pad_number(trailing.group(1), 3))
-
-    # Nothing numbered it — likely a one-shot.
-    numbered = bool(volume or chapter or trailing)
-    if year:
-        parts.append(f"({year})")
-
-    new_stem = " ".join(parts)
-    return (f"{new_stem}.{ext}" if ext else new_stem, numbered)
-
-
-def existing_series(library_root: Path) -> list[str]:
-    if not library_root.is_dir():
-        return []
-    return sorted(
-        (
-            p.name
-            for p in library_root.iterdir()
-            if p.is_dir() and not p.name.startswith(".")
-        ),
-        key=str.casefold,
-    )
-
-
-def trigger_kavita_scan() -> str | None:
-    """Ask Kavita to scan all libraries. Returns an error message or None."""
-    if not (KAVITA_URL and KAVITA_API_KEY):
-        return None
-    try:
-        auth = requests.post(
-            f"{KAVITA_URL}/api/Plugin/authenticate",
-            params={"apiKey": KAVITA_API_KEY, "pluginName": "Nomi"},
-            timeout=10,
-        )
-        auth.raise_for_status()
-        token = auth.json()["token"]
-        scan = requests.post(
-            f"{KAVITA_URL}/api/Library/scan-all",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        scan.raise_for_status()
-        return None
-    except requests.RequestException as exc:
-        return f"Files saved, but the Kavita scan could not be triggered: {exc}"
-
-
 @app.route("/", methods=["GET"])
 def index():
     """Launcher: the uploader plus links to other self-hosted apps."""
@@ -296,16 +120,15 @@ def index():
 
 @app.route("/uploader", methods=["GET"])
 def uploader():
-    series_by_library = {
-        name: existing_series(root) for name, root in LIBRARIES.items()
-    }
-    return render_template(
-        "uploader.html",
-        libraries=LIBRARIES,
-        series_by_library=series_by_library,
-        allowed_extensions=sorted(ALLOWED_EXTENSIONS),
-        kavita_scan_enabled=bool(KAVITA_URL and KAVITA_API_KEY),
-    )
+        uploader = KavitaUploader()
+        series_by_library = uploader.get_series_by_library()
+        return render_template(
+            "uploader.html",
+            libraries=uploader.libraries,
+            series_by_library=series_by_library,
+            allowed_extensions=sorted(uploader.allowed_extensions),
+            kavita_scan_enabled=uploader.kavita_scan_enabled,
+        )
 
 
 @app.route("/media", methods=["GET", "POST"])
@@ -325,7 +148,8 @@ def media_generator():
                         image_file.save(tmp.name)
                         tmp_path = tmp.name
                     try:
-                        prompt = _get_prompt_from_image(tmp_path)
+                        nim_client = NIMClient()
+                        prompt = nim_client.generate_prompt(tmp_path)
                     except Exception as exc:
                         flash(f"Failed to generate prompt from image: {exc}", "error")
                         prompt = ""
@@ -393,79 +217,65 @@ def media_download():
 
 @app.route("/upload", methods=["POST"])
 def upload():
-    library_name = request.form.get("library", "")
-    series_name = sanitize_series_name(request.form.get("series", ""))
-    year = request.form.get("year", "").strip()
-    files = [f for f in request.files.getlist("files") if f and f.filename]
+        uploader = KavitaUploader()
+        library_name = request.form.get("library", "")
+        series_name = uploader.sanitize_series_name(request.form.get("series", ""))
+        year = request.form.get("year", "").strip()
+        chapter = request.form.get("chapter", "").strip()
+        files = [f for f in request.files.getlist("files") if f and f.filename]
 
-    if year and not re.fullmatch(r"\d{4}", year):
-        flash("Year must be a 4-digit number.", "error")
-        return redirect(url_for("uploader"))
-    if library_name not in LIBRARIES:
-        flash("Please choose a valid library.", "error")
-        return redirect(url_for("uploader"))
-    if not series_name:
-        flash("Please enter a series name.", "error")
-        return redirect(url_for("uploader"))
-    if not files:
-        flash("Please choose at least one file to upload.", "error")
-        return redirect(url_for("uploader"))
+        if year and not re.fullmatch(r"\d{4}", year):
+            flash("Year must be a 4-digit number.", "error")
+            return redirect(url_for("uploader"))
+        if library_name not in uploader.libraries:
+            flash("Please choose a valid library.", "error")
+            return redirect(url_for("uploader"))
+        if not files:
+            flash("Please choose at least one file to upload.", "error")
+            return redirect(url_for("uploader"))
+        library_root = uploader.libraries[library_name]
+        if not library_root.is_dir():
+            flash(f"Library path does not exist: {library_root}", "error")
+            return redirect(url_for("uploader"))
+        series_dir = library_root / series_name
+        # Guard against any path traversal that slipped through sanitization.
+        if series_dir.resolve().parent != library_root.resolve():
+            flash("Invalid series name.", "error")
+            return redirect(url_for("uploader"))
+        is_new_series = not series_dir.exists()
+        if not is_new_series:
+            year = ""  # the year only applies to brand-new series
+        series_dir.mkdir(parents=True, exist_ok=True)
 
-    library_root = LIBRARIES[library_name]
-    if not library_root.is_dir():
-        flash(f"Library path does not exist: {library_root}", "error")
-        return redirect(url_for("uploader"))
+        saved, skipped = [], []
+        for file in files:
+            original = uploader.sanitize_filename(file.filename)
+            if not original or not uploader.allowed_file(original):
+                skipped.append(f"{file.filename} (file type not allowed)")
+                continue
+            filename, numbered = uploader.kavita_filename(series_name, original, year, chapter)
+            if not numbered and len(files) > 1:
+                # No chapter and several files — shared name would collide, so keep original.
+                filename = original
+            destination = series_dir / filename
+            if destination.exists():
+                skipped.append(f"{filename} (already exists)")
+                continue
+            file.save(destination)
+            saved.append(filename if filename == original else f"{original} → {filename}")
 
-    series_dir = library_root / series_name
-    # Guard against any path traversal that slipped through sanitization.
-    if series_dir.resolve().parent != library_root.resolve():
-        flash("Invalid series name.", "error")
-        return redirect(url_for("uploader"))
-
-    is_new_series = not series_dir.exists()
-    if not is_new_series:
-        year = ""  # the year only applies to brand-new series
-    series_dir.mkdir(parents=True, exist_ok=True)
-
-    saved, skipped = [], []
-    for file in files:
-        original = sanitize_filename(file.filename)
-        if not original or not allowed_file(original):
-            skipped.append(f"{file.filename} (file type not allowed)")
-            continue
-        filename, numbered = kavita_filename(series_name, original, year)
-        if not numbered and len(files) > 1:
-            # No volume/chapter/issue number found — with several files a
-            # shared one-shot name would collide, so keep the original name.
-            filename = original
-        destination = series_dir / filename
-        if destination.resolve().parent != series_dir.resolve():
-            skipped.append(f"{file.filename} (invalid filename)")
-            continue
-        if destination.exists():
-            skipped.append(f"{filename} (already exists)")
-            continue
-        file.save(destination)
-        saved.append(filename if filename == original else f"{original} → {filename}")
-
-    if saved:
-        flash(
-            f"Saved {len(saved)} file(s) to {library_name} / {series_name}: {', '.join(saved)}",
-            "success",
-        )
-        scan_error = trigger_kavita_scan()
+        if saved:
+            flash("Saved: " + ", ".join(saved), "success")
+        if skipped:
+            flash("Skipped: " + ", ".join(skipped), "warning")
+        # Trigger Kavita scan if configured
+        scan_error = uploader.trigger_kavita_scan()
         if scan_error:
             flash(scan_error, "error")
-        elif KAVITA_URL and KAVITA_API_KEY:
-            flash("Kavita library scan triggered.", "success")
-    for item in skipped:
-        flash(f"Skipped {item}", "error")
-
-    return redirect(url_for("uploader"))
-
-
+        return redirect(url_for("uploader"))
 if __name__ == "__main__":
-    if not LIBRARIES:
+    uploader = KavitaUploader()
+    if not uploader.libraries:
         raise SystemExit(
             "No libraries configured. Add at least one LIBRARY_<NAME>=<path> entry to your .env file."
         )
