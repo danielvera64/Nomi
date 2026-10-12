@@ -1,0 +1,8 @@
+{
+  "Descriptive": "Describe this image in detail, including objects, people, setting, lighting, and colors.",
+  "Artistic Style": "Analyze the artistic style, medium, and techniques used in this image.",
+  "Midjourney Prompt": "Create a detailed Midjourney prompt that would generate this image.",
+  "Stable Diffusion Prompt": "Create a detailed Stable Diffusion prompt that would generate this image.",
+  "DALL-E Prompt": "Create a detailed DALL-E prompt that would generate this image.",
+  "Simple Description": "Provide a simple, clear description of what is shown in this image."
+}

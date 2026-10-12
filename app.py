@@ -28,6 +28,7 @@ from flask import (
 )
 
 import base64
+import json
 from src.nim_client import NIMClient
 import tempfile
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
@@ -137,6 +138,22 @@ def media_generator():
     images: list[dict] = []
     prompt = ""
     uploaded_image_b64 = None
+    # Load models from JSON
+    models_data = {}
+    MODELS_JSON_PATH = os.path.join(os.path.dirname(__file__), 'static', 'prompt_to_images_prompts.json')
+    if not os.path.exists(MODELS_JSON_PATH):
+        flash(f"Configuration error: {MODELS_JSON_PATH} not found. Please create it from prompt_to_images_prompts.json.example", "error")
+    else:
+        with open(MODELS_JSON_PATH, "r") as f:
+            models_data = json.load(f)
+    # Load image-to-prompt prompts from JSON
+    image_to_prompt_data = {}
+    IMAGE_TO_PROMPT_JSON_PATH = os.path.join(os.path.dirname(__file__), 'static', 'image_to_prompt_prompts.json')
+    if not os.path.exists(IMAGE_TO_PROMPT_JSON_PATH):
+        flash(f"Configuration error: {IMAGE_TO_PROMPT_JSON_PATH} not found. Please create it from image_to_prompt_prompts.json.example", "error")
+    else:
+        with open(IMAGE_TO_PROMPT_JSON_PATH, "r") as f:
+            image_to_prompt_data = json.load(f)
     if request.method == "POST":
         if request.form.get("generate_prompt"):
             image_file = request.files.get("image_file")
@@ -149,7 +166,12 @@ def media_generator():
                         tmp_path = tmp.name
                     try:
                         nim_client = NIMClient()
-                        prompt = nim_client.generate_prompt(tmp_path)
+                        template_name = request.form.get("image_to_prompt_template", "").strip()
+                        prompt_template = image_to_prompt_data.get(template_name)
+                        if template_name and not prompt_template:
+                            flash("Please choose a valid prompt template.", "error")
+                        else:
+                            prompt = nim_client.generate_prompt(tmp_path, prompt_template=prompt_template)
                     except Exception as exc:
                         flash(f"Failed to generate prompt from image: {exc}", "error")
                         prompt = ""
@@ -175,24 +197,33 @@ def media_generator():
                     "error",
                 )
             else:
-                generator = ZImageGenerator(
-                    base_url=COMFYUI_URL, workflow_path=COMFYUI_WORKFLOW or None
-                )
-                try:
-                    results = generator.generate(prompt)
-                    images = [
-                        {
-                            **image,
-                            "view_url": generator.view_url(generator.base_url, image),
-                        }
-                        for image in results
-                    ]
-                    if not images:
-                        flash(
-                            "Generation finished but no images were returned.", "error"
-                        )
-                except Exception as exc:
-                    flash(f"Image generation failed: {exc}", "error")
+                model_name = request.form.get("model", "").strip()
+                if not model_name:
+                    flash("Please select a model before generating an image.", "error")
+                else:
+                    # Prepend model description if available
+                    model_info = models_data.get(model_name, {})
+                    description = model_info.get("description", "")
+                    if description:
+                        prompt = f"{description} {prompt}"
+                    generator = ZImageGenerator(
+                        base_url=COMFYUI_URL, workflow_path=COMFYUI_WORKFLOW or None
+                    )
+                    try:
+                        results = generator.generate(prompt)
+                        images = [
+                            {
+                                **image,
+                                "view_url": generator.view_url(generator.base_url, image),
+                            }
+                            for image in results
+                        ]
+                        if not images:
+                            flash(
+                                "Generation finished but no images were returned.", "error"
+                            )
+                    except Exception as exc:
+                        flash(f"Image generation failed: {exc}", "error")
         # If neither button pressed, do nothing (just redisplay)
     return render_template(
         "media.html",
@@ -201,6 +232,8 @@ def media_generator():
         uploaded_image_b64=uploaded_image_b64,
         configured=bool(COMFYUI_URL),
         nim_configured=bool(NVIDIA_API_KEY),
+        image_to_prompt_prompts=image_to_prompt_data,
+        models=models_data,
     )
 
 

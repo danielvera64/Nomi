@@ -1,0 +1,11 @@
+{
+  "Stable Diffusion XL": {
+    "description": "A powerful text-to-image model for generating high-quality images."
+  },
+  "DreamShaper": {
+    "description": "A model tuned for artistic and imaginative visuals."
+  },
+  "PixelArt Diffusion": {
+    "description": "Specialized in generating pixel art sprites and tiles."
+  }
+}
