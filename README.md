@@ -41,20 +41,29 @@ Files that already exist in the target folder are skipped, never overwritten.
 
 ## Media generator
 
-The media generator has two modes:
+The media generator has three modes:
 
 - **Image → Prompt** — upload an image and use an NVIDIA NIM vision model to
   generate a text prompt.
 - **Prompt → Image** — enter a prompt and generate an image through a
   configured ComfyUI server.
+- **Multiple angles** — upload a reference image, provide optional prepend and
+  append text, enter a prompt, and generate several character angles with the
+  bundled Flux2 workflow.
 
 Prompt-to-image uses the selected entry’s `description` as a prompt prefix;
 the configured ComfyUI workflow still controls the actual generation model.
 Generated images are previewed and downloaded from the local
 `COMFYUI_OUTPUT_DIR`, not from ComfyUI’s HTTP `/view` endpoint.
+The selected media-generator tab stays active after generation and validation
+errors.
 
 If ComfyUI runs on another machine, make sure its output directory is mounted
 or shared with Nomi at the path set in `COMFYUI_OUTPUT_DIR`.
+
+The multiple-angles mode requires the ComfyUI
+`comfyui-simple-prompt-batcher` custom node and the Flux2 Klein model files
+named in `workflows/FLUX2-DEV-KLEIN_4_and_9B_1_click_multiple_character_angles-v1.0.json`.
 
 ## Gallery
 

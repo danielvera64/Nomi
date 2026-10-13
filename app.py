@@ -35,6 +35,7 @@ from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import HumanMessage
 
 from src.kavita_uploader import KavitaUploader
+from src.multiple_angles_generator import MultipleAnglesGenerator
 from src.zimage_generator import ZImageGenerator
 
 load_dotenv()
@@ -152,6 +153,9 @@ def media_generator():
     images: list[dict] = []
     prompt = ""
     uploaded_image_b64 = None
+    active_tab = request.form.get("active_tab", "image-to-prompt")
+    if active_tab not in {"image-to-prompt", "prompt-to-image", "multiple-angles"}:
+        active_tab = "image-to-prompt"
     # Load models from JSON
     models_data = {}
     MODELS_JSON_PATH = os.path.join(os.path.dirname(__file__), 'static', 'prompt_to_images_prompts.json')
@@ -242,6 +246,45 @@ def media_generator():
                             )
                     except Exception as exc:
                         flash(f"Image generation failed: {exc}", "error")
+        elif request.form.get("generate_angles"):
+            if not COMFYUI_URL:
+                flash(
+                    "ComfyUI is not configured — set COMFYUI_URL in your .env file.",
+                    "error",
+                )
+            else:
+                image_file = request.files.get("angles_image")
+                prepend = request.form.get("angles_prepend", "").strip()
+                angle_prompt = request.form.get("angles_prompt", "").strip()
+                append = request.form.get("angles_append", "").strip()
+                if not image_file or not image_file.filename:
+                    flash("Please upload an image to generate multiple angles.", "error")
+                elif not angle_prompt:
+                    flash("Please enter a prompt to generate multiple angles.", "error")
+                else:
+                    generator = MultipleAnglesGenerator(base_url=COMFYUI_URL)
+                    try:
+                        results = generator.generate(
+                            image_file,
+                            prepend=prepend,
+                            prompts=angle_prompt,
+                            append=append,
+                        )
+                        images = [
+                            {
+                                **image,
+                                "path": "/".join(
+                                    part
+                                    for part in (image.get("subfolder", ""), image["filename"])
+                                    if part
+                                ),
+                            }
+                            for image in results
+                        ]
+                        if not images:
+                            flash("Generation finished but no images were returned.", "error")
+                    except Exception as exc:
+                        flash(f"Multiple-angle generation failed: {exc}", "error")
         # If neither button pressed, do nothing (just redisplay)
     return render_template(
         "media.html",
@@ -252,6 +295,7 @@ def media_generator():
         nim_configured=bool(NVIDIA_API_KEY),
         image_to_prompt_prompts=image_to_prompt_data,
         models=models_data,
+        active_tab=active_tab,
     )
 
 

@@ -110,9 +110,11 @@
   <div class="tabs" id="mode-tabs">
     <button class="tab active" data-target="image-to-prompt" type="button">🖼️ Image → Prompt</button>
     <button class="tab" data-target="prompt-to-image" type="button">🎨 Prompt → Image</button>
+    <button class="tab" data-target="multiple-angles" type="button">🔄 Multiple angles</button>
   </div>
 
   <form method="post" action="{{ url_for('media_generator') }}" enctype="multipart/form-data" id="generate-form">
+    <input type="hidden" name="active_tab" id="active-tab" value="{{ active_tab }}">
     <section id="section-image-to-prompt" class="tab-content active">
 
       <div>
@@ -164,6 +166,20 @@
       <textarea name="prompt" id="prompt" placeholder="Describe the image you want to generate…">{{ prompt }}</textarea>
 
     </section>
+
+    <section id="section-multiple-angles">
+      <label for="angles_image">Load image</label>
+      <input type="file" name="angles_image" id="angles_image" accept="image/*">
+
+      <label for="angles_prepend">Prepend prompt</label>
+      <textarea name="angles_prepend" id="angles_prepend" placeholder="Text placed before each angle prompt…"></textarea>
+
+      <label for="angles_prompt">Prompt</label>
+      <textarea name="angles_prompt" id="angles_prompt" placeholder="Describe the character or scene…"></textarea>
+
+      <label for="angles_append">Append prompt</label>
+      <textarea name="angles_append" id="angles_append" placeholder="Text placed after each angle prompt…"></textarea>
+    </section>
     <div class="button-group" id="button-group">
       <button type="submit" id="generate-button" value="1">🖼️ Generate prompt from image</button>
     </div>
@@ -195,38 +211,56 @@
     const progressDiv = document.getElementById('progress');
     const imageToPromptSection = document.getElementById('section-image-to-prompt');
     const promptToImageSection = document.getElementById('section-prompt-to-image');
+    const multipleAnglesSection = document.getElementById('section-multiple-angles');
     const generateButton = document.getElementById('generate-button');
     const pageTitle = document.getElementById('page-title');
     const hintText = document.getElementById('hint-text');
     const predefinedPromptSelect = document.getElementById('model');
+    const activeTabInput = document.getElementById('active-tab');
 
     const tabs = document.querySelectorAll('#mode-tabs button');
 
+    const sections = {
+      'image-to-prompt': imageToPromptSection,
+      'prompt-to-image': promptToImageSection,
+      'multiple-angles': multipleAnglesSection
+    };
+    const buttonNames = {
+      'image-to-prompt': 'generate_prompt',
+      'prompt-to-image': 'generate_image',
+      'multiple-angles': 'generate_angles'
+    };
+    const buttonLabels = {
+      'image-to-prompt': '🖼️ Generate prompt from image',
+      'prompt-to-image': '🎨 Generate image from prompt',
+      'multiple-angles': '🔄 Generate multiple angles'
+    };
+    const hints = {
+      'image-to-prompt': 'Upload an image to get a text prompt describing it.',
+      'prompt-to-image': 'Enter a prompt to generate an image.',
+      'multiple-angles': 'Upload a reference image and enter prompt text to generate multiple angles.'
+    };
+    const titles = {
+      'image-to-prompt': '🎨 Media content generator – Image → Prompt',
+      'prompt-to-image': '🎨 Media content generator – Prompt → Image',
+      'multiple-angles': '🎨 Media content generator – Multiple angles'
+    };
+
     function updateUIForTab(target) {
+      if (!sections[target]) target = 'image-to-prompt';
       // Update tab activation
       tabs.forEach(t => t.classList.remove('active'));
       const activeTab = document.querySelector(`#mode-tabs button[data-target="${target}"]`);
       if (activeTab) activeTab.classList.add('active');
 
-      // Show/hide sections
-      if (target === 'image-to-prompt') {
-        imageToPromptSection.classList.remove('hidden');
-        promptToImageSection.classList.add('hidden');
-        // Set button to generate prompt
-        generateButton.name = 'generate_prompt';
-        // Update hint and page title
-        hintText.textContent = 'Upload an image to get a text prompt describing it.';
-        pageTitle.textContent = '🎨 Media content generator – Image → Prompt';
-      } else {
-        imageToPromptSection.classList.add('hidden');
-        promptToImageSection.classList.remove('hidden');
-        // Set button to generate image
-        generateButton.name = 'generate_image';
-        generateButton.textContent = '🎨 Generate image from prompt';
-        // Update hint and page title
-        hintText.textContent = 'Enter a prompt to generate an image.';
-        pageTitle.textContent = '🎨 Media content generator – Prompt → Image';
-      }
+      Object.entries(sections).forEach(([key, section]) => {
+        section.classList.toggle('hidden', key !== target);
+      });
+      generateButton.name = buttonNames[target];
+      generateButton.textContent = buttonLabels[target];
+      hintText.textContent = hints[target];
+      pageTitle.textContent = titles[target];
+      activeTabInput.value = target;
     }
 
     tabs.forEach(tab => {
@@ -235,8 +269,7 @@
       });
     });
 
-    // Initialize UI based on default tab (image-to-prompt)
-    updateUIForTab('image-to-prompt');
+    updateUIForTab('{{ active_tab }}');
 
     // Handle copy to clipboard for prompt textarea
     const copyPromptBtn = document.querySelector('.copy-prompt-btn');
