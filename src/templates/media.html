@@ -179,10 +179,12 @@
     <div class="results">
       <label>Result</label>
       {% for image in images %}
-        <img src="{{ image.view_url }}" alt="Generated image" loading="lazy">
-        <a class="download" href="{{ url_for('media_download', filename=image.filename, subfolder=image.subfolder) }}">⬇ Download</a>
+        <a href="{{ url_for('gallery_file', path=image.path) }}" target="_blank" rel="noopener noreferrer">
+          <img src="{{ url_for('gallery_file', path=image.path) }}" alt="Generated image" loading="lazy">
+        </a>
+        <a class="download" href="{{ url_for('gallery_file', path=image.path, download=1) }}">⬇ Download</a>
       {% endfor %}
-      <p class="hint">Images are served by your ComfyUI server and stay in its output folder.</p>
+      <p class="hint">Images are served from your configured ComfyUI output folder.</p>
     </div>
   {% endif %}
 {% endblock %}

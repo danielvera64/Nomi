@@ -58,6 +58,7 @@ NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
 COMFYUI_OUTPUT_DIR = Path(
     os.getenv("COMFYUI_OUTPUT_DIR", "~/ComfyUI/output")
 ).expanduser()
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
 
 
 
@@ -109,6 +110,19 @@ def load_apps() -> dict[str, str]:
 
 
 EXTERNAL_APPS = load_apps()
+
+
+def _safe_output_path(relative_path: str) -> Path | None:
+    """Resolve a path inside COMFYUI_OUTPUT_DIR, rejecting traversal and symlinks outside it."""
+    if not COMFYUI_OUTPUT_DIR.is_dir():
+        return None
+    root = COMFYUI_OUTPUT_DIR.resolve()
+    try:
+        candidate = (root / relative_path).resolve() if relative_path else root
+        candidate.relative_to(root)
+    except (OSError, RuntimeError, ValueError):
+        return None
+    return candidate
 
 
 @app.route("/", methods=["GET"])
@@ -214,7 +228,11 @@ def media_generator():
                         images = [
                             {
                                 **image,
-                                "view_url": generator.view_url(generator.base_url, image),
+                                "path": "/".join(
+                                    part
+                                    for part in (image.get("subfolder", ""), image["filename"])
+                                    if part
+                                ),
                             }
                             for image in results
                         ]
@@ -237,15 +255,74 @@ def media_generator():
     )
 
 
-@app.route("/media/download")
-def media_download():
-    """Serve a generated image from ComfyUI's local output folder."""
-    filename = request.args.get("filename", "")
-    subfolder = request.args.get("subfolder", "")
-    if not filename or not COMFYUI_OUTPUT_DIR.is_dir():
+@app.route("/gallery")
+def gallery():
+    """Browse ComfyUI's local output folder."""
+    relative_path = request.args.get("path", "").strip("/")
+    if not COMFYUI_OUTPUT_DIR.is_dir():
+        return render_template(
+            "gallery.html",
+            output_dir_exists=False,
+            folders=[],
+            files=[],
+            breadcrumbs=[],
+        )
+    current = _safe_output_path(relative_path)
+    if current is None or not current.is_dir():
         abort(404)
-    path = "/".join(part for part in (subfolder, filename) if part)
-    return send_from_directory(COMFYUI_OUTPUT_DIR, path, as_attachment=True)
+    relative_path = current.relative_to(COMFYUI_OUTPUT_DIR.resolve()).as_posix()
+
+    folders, files = [], []
+    for item in current.iterdir():
+        if item.name.startswith("."):
+            continue
+        safe_item = _safe_output_path(item.relative_to(COMFYUI_OUTPUT_DIR).as_posix())
+        if safe_item is None:
+            continue
+        relative = item.relative_to(COMFYUI_OUTPUT_DIR).as_posix()
+        if item.is_dir():
+            folders.append({"name": item.name, "path": relative})
+        elif item.is_file() and item.suffix.lower() in IMAGE_EXTENSIONS:
+            files.append((item.stat().st_mtime_ns, {
+                "name": item.name,
+                "path": relative,
+            }))
+
+    folders.sort(key=lambda item: item["name"].casefold())
+    files.sort(key=lambda item: item[0], reverse=True)
+    files = [image for _, image in files]
+
+    parts = [part for part in relative_path.split("/") if part]
+    breadcrumbs = [
+        {"name": part, "path": "/".join(parts[: index + 1])}
+        for index, part in enumerate(parts)
+    ]
+    return render_template(
+        "gallery.html",
+        output_dir_exists=COMFYUI_OUTPUT_DIR.is_dir(),
+        folders=folders,
+        files=files,
+        breadcrumbs=breadcrumbs,
+    )
+
+
+@app.route("/gallery/file")
+def gallery_file():
+    """Show or download a file from ComfyUI's local output folder."""
+    relative_path = request.args.get("path", "").strip("/")
+    current = _safe_output_path(relative_path)
+    if (
+        current is None
+        or not current.is_file()
+        or current.suffix.lower() not in IMAGE_EXTENSIONS
+    ):
+        abort(404)
+    relative_path = current.relative_to(COMFYUI_OUTPUT_DIR.resolve()).as_posix()
+    return send_from_directory(
+        COMFYUI_OUTPUT_DIR,
+        relative_path,
+        as_attachment=request.args.get("download") == "1",
+    )
 
 
 @app.route("/upload", methods=["POST"])

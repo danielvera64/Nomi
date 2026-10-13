@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Gallery · Nomi{% endblock %}
+
+{% block styles %}
+    @media (min-width: 481px) {
+      .card {
+        width: 70%;
+        max-width: 70%;
+        min-height: calc(100vh - 4rem);
+      }
+    }
+    .breadcrumbs {
+      display: flex;
+      flex-wrap: wrap;
+      gap: .35rem;
+      align-items: center;
+      margin-bottom: 1rem;
+      color: var(--muted);
+      font-size: .85rem;
+    }
+    .breadcrumbs a { color: var(--accent); text-decoration: none; }
+    .breadcrumbs a:hover { text-decoration: underline; }
+    .folders {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
+      gap: .6rem;
+      margin-bottom: 1rem;
+    }
+    .folder {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      padding: .75rem;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--bg);
+      color: var(--text);
+      text-decoration: none;
+      overflow-wrap: anywhere;
+    }
+    .folder:hover { border-color: var(--accent); }
+    .gallery-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+      gap: .8rem;
+    }
+    .gallery-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      overflow: hidden;
+    }
+    .gallery-card img,
+    .gallery-card .preview-link {
+      display: block;
+      width: 100%;
+      aspect-ratio: 1;
+      object-fit: cover;
+      background: var(--card);
+    }
+    .gallery-card .name {
+      padding: .5rem .6rem;
+      font-size: .8rem;
+      overflow-wrap: anywhere;
+    }
+    .gallery-card .download {
+      display: block;
+      padding: .5rem .6rem;
+      border-top: 1px solid var(--border);
+      color: var(--accent);
+      font-size: .8rem;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .gallery-card .download:hover { background: rgba(79, 195, 161, .1); }
+{% endblock %}
+
+{% block content %}
+  <a class="back-link" href="{{ url_for('index') }}">← Home</a>
+  <h1>🖼️ Gallery</h1>
+  <p class="subtitle">Browse and download files from your ComfyUI output folder.</p>
+
+  {% if not output_dir_exists %}
+    <div class="flash error">ComfyUI output folder is not configured or does not exist — set <code>COMFYUI_OUTPUT_DIR</code> in your .env file.</div>
+  {% else %}
+    <nav class="breadcrumbs" aria-label="Folder path">
+      <a href="{{ url_for('gallery') }}">Output</a>
+      {% for crumb in breadcrumbs %}
+        <span>/</span>
+        <a href="{{ url_for('gallery', path=crumb.path) }}">{{ crumb.name }}</a>
+      {% endfor %}
+    </nav>
+
+    {% if folders %}
+      <div class="folders">
+        {% for folder in folders %}
+          <a class="folder" href="{{ url_for('gallery', path=folder.path) }}">📁 {{ folder.name }}</a>
+        {% endfor %}
+      </div>
+    {% endif %}
+
+    {% if files %}
+      <div class="gallery-grid">
+        {% for file in files %}
+          <div class="gallery-card">
+            <a class="preview-link" href="{{ url_for('gallery_file', path=file.path) }}" target="_blank" rel="noopener noreferrer">
+              <img src="{{ url_for('gallery_file', path=file.path) }}" alt="{{ file.name }}" loading="lazy">
+            </a>
+            <div class="name" title="{{ file.name }}">{{ file.name }}</div>
+            <a class="download" href="{{ url_for('gallery_file', path=file.path, download=1) }}">⬇ Download</a>
+          </div>
+        {% endfor %}
+      </div>
+    {% elif not folders %}
+      <p class="hint">This folder is empty.</p>
+    {% endif %}
+  {% endif %}
+{% endblock %}
