@@ -41,7 +41,7 @@ Files that already exist in the target folder are skipped, never overwritten.
 
 ## Media generator
 
-The media generator has three modes:
+The media generator has four modes:
 
 - **Image → Prompt** — upload an image and use an NVIDIA NIM vision model to
   generate a text prompt.
@@ -50,6 +50,8 @@ The media generator has three modes:
 - **Multiple angles** — upload a reference image, provide optional prepend and
   append text, enter a prompt, and generate several character angles with the
   bundled Flux2 workflow.
+- **Upscale** — upload an image and upscale it with the bundled SeedVR2
+  workflow.
 
 Prompt-to-image uses the selected entry’s `description` as a prompt prefix;
 the configured ComfyUI workflow still controls the actual generation model.
@@ -64,6 +66,10 @@ or shared with Nomi at the path set in `COMFYUI_OUTPUT_DIR`.
 The multiple-angles mode requires the ComfyUI
 `comfyui-simple-prompt-batcher` custom node and the Flux2 Klein model files
 named in `workflows/FLUX2-DEV-KLEIN_4_and_9B_1_click_multiple_character_angles-v1.0.json`.
+
+The upscale mode requires ComfyUI nodes providing SeedVR2 and
+`Image Comparer (rgthree)`, plus the model files named in
+`workflows/seedvr2_upscale.json`.
 
 ## Gallery
 

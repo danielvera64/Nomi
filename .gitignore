@@ -4,4 +4,5 @@ __pycache__/
 workflows/*
 !workflows/ZImageTurbo-Workflow-API.json
 !workflows/FLUX2-DEV-KLEIN_4_and_9B_1_click_multiple_character_angles-v1.0.json
+!workflows/seedvr2_upscale.json
 static/*.json

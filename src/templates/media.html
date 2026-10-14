@@ -111,6 +111,7 @@
     <button class="tab active" data-target="image-to-prompt" type="button">🖼️ Image → Prompt</button>
     <button class="tab" data-target="prompt-to-image" type="button">🎨 Prompt → Image</button>
     <button class="tab" data-target="multiple-angles" type="button">🔄 Multiple angles</button>
+    <button class="tab" data-target="upscale" type="button">🔍 Upscale</button>
   </div>
 
   <form method="post" action="{{ url_for('media_generator') }}" enctype="multipart/form-data" id="generate-form">
@@ -180,6 +181,11 @@
       <label for="angles_append">Append prompt</label>
       <textarea name="angles_append" id="angles_append" placeholder="Text placed after each angle prompt…"></textarea>
     </section>
+
+    <section id="section-upscale">
+      <label for="upscale_image">Load image</label>
+      <input type="file" name="upscale_image" id="upscale_image" accept="image/*">
+    </section>
     <div class="button-group" id="button-group">
       <button type="submit" id="generate-button" value="1">🖼️ Generate prompt from image</button>
     </div>
@@ -212,6 +218,7 @@
     const imageToPromptSection = document.getElementById('section-image-to-prompt');
     const promptToImageSection = document.getElementById('section-prompt-to-image');
     const multipleAnglesSection = document.getElementById('section-multiple-angles');
+    const upscaleSection = document.getElementById('section-upscale');
     const generateButton = document.getElementById('generate-button');
     const pageTitle = document.getElementById('page-title');
     const hintText = document.getElementById('hint-text');
@@ -223,27 +230,32 @@
     const sections = {
       'image-to-prompt': imageToPromptSection,
       'prompt-to-image': promptToImageSection,
-      'multiple-angles': multipleAnglesSection
+      'multiple-angles': multipleAnglesSection,
+      'upscale': upscaleSection
     };
     const buttonNames = {
       'image-to-prompt': 'generate_prompt',
       'prompt-to-image': 'generate_image',
-      'multiple-angles': 'generate_angles'
+      'multiple-angles': 'generate_angles',
+      'upscale': 'generate_upscale'
     };
     const buttonLabels = {
       'image-to-prompt': '🖼️ Generate prompt from image',
       'prompt-to-image': '🎨 Generate image from prompt',
-      'multiple-angles': '🔄 Generate multiple angles'
+      'multiple-angles': '🔄 Generate multiple angles',
+      'upscale': '🔍 Upscale image'
     };
     const hints = {
       'image-to-prompt': 'Upload an image to get a text prompt describing it.',
       'prompt-to-image': 'Enter a prompt to generate an image.',
-      'multiple-angles': 'Upload a reference image and enter prompt text to generate multiple angles.'
+      'multiple-angles': 'Upload a reference image and enter prompt text to generate multiple angles.',
+      'upscale': 'Upload an image to upscale it.'
     };
     const titles = {
       'image-to-prompt': '🎨 Media content generator – Image → Prompt',
       'prompt-to-image': '🎨 Media content generator – Prompt → Image',
-      'multiple-angles': '🎨 Media content generator – Multiple angles'
+      'multiple-angles': '🎨 Media content generator – Multiple angles',
+      'upscale': '🎨 Media content generator – Upscale'
     };
 
     function updateUIForTab(target) {

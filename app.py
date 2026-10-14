@@ -36,6 +36,7 @@ from langchain_core.messages import HumanMessage
 
 from src.kavita_uploader import KavitaUploader
 from src.multiple_angles_generator import MultipleAnglesGenerator
+from src.upscale_generator import UpscaleGenerator
 from src.zimage_generator import ZImageGenerator
 
 load_dotenv()
@@ -154,7 +155,7 @@ def media_generator():
     prompt = ""
     uploaded_image_b64 = None
     active_tab = request.form.get("active_tab", "image-to-prompt")
-    if active_tab not in {"image-to-prompt", "prompt-to-image", "multiple-angles"}:
+    if active_tab not in {"image-to-prompt", "prompt-to-image", "multiple-angles", "upscale"}:
         active_tab = "image-to-prompt"
     # Load models from JSON
     models_data = {}
@@ -285,6 +286,35 @@ def media_generator():
                             flash("Generation finished but no images were returned.", "error")
                     except Exception as exc:
                         flash(f"Multiple-angle generation failed: {exc}", "error")
+        elif request.form.get("generate_upscale"):
+            if not COMFYUI_URL:
+                flash(
+                    "ComfyUI is not configured — set COMFYUI_URL in your .env file.",
+                    "error",
+                )
+            else:
+                image_file = request.files.get("upscale_image")
+                if not image_file or not image_file.filename:
+                    flash("Please upload an image to upscale.", "error")
+                else:
+                    generator = UpscaleGenerator(base_url=COMFYUI_URL)
+                    try:
+                        results = generator.generate(image_file)
+                        images = [
+                            {
+                                **image,
+                                "path": "/".join(
+                                    part
+                                    for part in (image.get("subfolder", ""), image["filename"])
+                                    if part
+                                ),
+                            }
+                            for image in results
+                        ]
+                        if not images:
+                            flash("Upscale finished but no images were returned.", "error")
+                    except Exception as exc:
+                        flash(f"Upscale failed: {exc}", "error")
         # If neither button pressed, do nothing (just redisplay)
     return render_template(
         "media.html",
