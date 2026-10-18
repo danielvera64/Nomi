@@ -120,6 +120,20 @@
 
       <div>
 
+        <label for="nim_vision_model">Vision model</label>
+
+        <select name="nim_vision_model" id="nim_vision_model">
+
+          <option value="">Select a vision model</option>
+
+          {% for model in nim_vision_models %}
+
+            <option value="{{ model }}" {% if model == selected_vision_model %}selected{% endif %}>{{ model }}</option>
+
+          {% endfor %}
+
+        </select>
+
         <label for="image_to_prompt_template">Predefined prompt</label>
 
         <select name="image_to_prompt_template" id="image_to_prompt_template">
@@ -172,6 +186,14 @@
       <label for="angles_image">Load image</label>
       <input type="file" name="angles_image" id="angles_image" accept="image/*">
 
+      <label for="angles_prompt_template">Predefined prompt</label>
+      <select name="angles_prompt_template" id="angles_prompt_template">
+        <option value="">Select a prompt template</option>
+        {% for template_name, template_info in multiple_angles_prompts.items() %}
+          <option value="{{ template_name }}">{{ template_name }}</option>
+        {% endfor %}
+      </select>
+
       <label for="angles_prepend">Prepend prompt</label>
       <textarea name="angles_prepend" id="angles_prepend" placeholder="Text placed before each angle prompt…"></textarea>
 
@@ -223,6 +245,8 @@
     const pageTitle = document.getElementById('page-title');
     const hintText = document.getElementById('hint-text');
     const predefinedPromptSelect = document.getElementById('model');
+    const multipleAnglesPrompts = {{ multiple_angles_prompts | tojson }};
+    const anglesPromptTemplateSelect = document.getElementById('angles_prompt_template');
     const activeTabInput = document.getElementById('active-tab');
 
     const tabs = document.querySelectorAll('#mode-tabs button');
@@ -282,6 +306,14 @@
     });
 
     updateUIForTab('{{ active_tab }}');
+
+    anglesPromptTemplateSelect.addEventListener('change', () => {
+      const template = multipleAnglesPrompts[anglesPromptTemplateSelect.value];
+      if (!template) return;
+      document.getElementById('angles_prepend').value = template.prepend || '';
+      document.getElementById('angles_prompt').value = template.prompt || '';
+      document.getElementById('angles_append').value = template.append || '';
+    });
 
     // Handle copy to clipboard for prompt textarea
     const copyPromptBtn = document.querySelector('.copy-prompt-btn');

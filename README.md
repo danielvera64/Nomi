@@ -112,14 +112,14 @@ Open http://localhost:5000 in your browser.
 | `COMFYUI_WORKFLOW` | Optional. Path to a ComfyUI API workflow JSON (defaults to the bundled `workflows/ZImageTurbo-Workflow-API.json`). |
 | `COMFYUI_OUTPUT_DIR` | Optional. Local folder where ComfyUI saves generated images; used by the media generator and gallery (default: `~/ComfyUI/output`). |
 | `NVIDIA_API_KEY` | Optional. NVIDIA API key for accessing NIM models. Required for image-to-prompt. |
-| `NIM_VISION_MODEL` | Optional. Vision model to use for generating prompts from images (default: `meta/llama-3.2-11b-vision-instruct`). |
+| `NIM_VISION_MODEL` | Optional. Comma-separated vision models shown in the image-to-prompt picker (default: `meta/llama-3.2-11b-vision-instruct,meta/llama-3.2-90b-vision-instruct`). |
 
 Without the Kavita API settings, files are still stored correctly and Kavita
 will pick them up on its next scheduled scan, or on a manual scan.
 
 ## Prompt configuration files
 
-The media generator reads two local JSON files:
+The media generator reads these local JSON files:
 
 - `static/image_to_prompt_prompts.json`
   - Maps a display name to the prompt sent to the NIM vision model.
@@ -128,6 +128,10 @@ The media generator reads two local JSON files:
   - Maps a display name to an object with a `description` that is prepended to
     the user’s prompt before ComfyUI generation.
   - Example: `{"Stable Diffusion XL": {"description": "..."}}`
+- `static/multiple_angles_prompts.json`
+  - Maps a display name to an object with `prepend`, `prompt`, and `append`
+    text used by the multiple-angle generator.
+  - Example: `{"Character Turnaround": {"prepend": "...", "prompt": "...", "append": "..."}}`
 
 The `.example` files are templates. The actual JSON files are ignored by Git,
 so copy them during setup and edit them to match your preferred prompts.

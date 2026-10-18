@@ -1,0 +1,12 @@
+{
+  "Character Turnaround": {
+    "prepend": "Generate the same character consistently.",
+    "prompt": "Show the character from the front, side, and back while standing in a neutral pose.",
+    "append": "Keep the face, hair, clothing, colors, and lighting consistent."
+  },
+  "Scene Exploration": {
+    "prepend": "Generate the same scene consistently.",
+    "prompt": "Show the scene from three useful angles that reveal its layout and depth.",
+    "append": "Preserve the setting, objects, colors, lighting, and mood."
+  }
+}

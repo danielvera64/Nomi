@@ -29,7 +29,7 @@ from flask import (
 
 import base64
 import json
-from src.nim_client import NIMClient
+from src.nim_client import NIMClient, get_vision_models
 import tempfile
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import HumanMessage
@@ -53,7 +53,7 @@ app.config["MAX_CONTENT_LENGTH"] = int(os.getenv("MAX_UPLOAD_MB", "1024")) * 102
 COMFYUI_URL = os.getenv("COMFYUI_URL", "").rstrip("/")
 COMFYUI_WORKFLOW = os.getenv("COMFYUI_WORKFLOW", "").strip()
 # NVIDIA NIM (image-to-prompt) configuration
-NIM_VISION_MODEL = os.getenv("NIM_VISION_MODEL", "meta/llama-3.2-11b-vision-instruct")
+NIM_VISION_MODELS = get_vision_models()
 NVIDIA_API_KEY = os.getenv("NVIDIA_API_KEY", "").strip()
 # Local folder where the ComfyUI server saves generated images, used for the
 # download button.
@@ -154,6 +154,7 @@ def media_generator():
     images: list[dict] = []
     prompt = ""
     uploaded_image_b64 = None
+    selected_vision_model = ""
     active_tab = request.form.get("active_tab", "image-to-prompt")
     if active_tab not in {"image-to-prompt", "prompt-to-image", "multiple-angles", "upscale"}:
         active_tab = "image-to-prompt"
@@ -173,6 +174,14 @@ def media_generator():
     else:
         with open(IMAGE_TO_PROMPT_JSON_PATH, "r") as f:
             image_to_prompt_data = json.load(f)
+    # Load multiple-angle prompts from JSON
+    multiple_angles_data = {}
+    MULTIPLE_ANGLES_JSON_PATH = os.path.join(os.path.dirname(__file__), 'static', 'multiple_angles_prompts.json')
+    if not os.path.exists(MULTIPLE_ANGLES_JSON_PATH):
+        flash(f"Configuration error: {MULTIPLE_ANGLES_JSON_PATH} not found. Please create it from multiple_angles_prompts.json.example", "error")
+    else:
+        with open(MULTIPLE_ANGLES_JSON_PATH, "r") as f:
+            multiple_angles_data = json.load(f)
     if request.method == "POST":
         if request.form.get("generate_prompt"):
             image_file = request.files.get("image_file")
@@ -184,12 +193,16 @@ def media_generator():
                         image_file.save(tmp.name)
                         tmp_path = tmp.name
                     try:
-                        nim_client = NIMClient()
                         template_name = request.form.get("image_to_prompt_template", "").strip()
                         prompt_template = image_to_prompt_data.get(template_name)
-                        if template_name and not prompt_template:
+                        vision_model = request.form.get("nim_vision_model", "").strip()
+                        if vision_model not in NIM_VISION_MODELS:
+                            flash("Please choose a valid vision model.", "error")
+                        elif template_name and not prompt_template:
                             flash("Please choose a valid prompt template.", "error")
                         else:
+                            selected_vision_model = vision_model
+                            nim_client = NIMClient(model=vision_model)
                             prompt = nim_client.generate_prompt(tmp_path, prompt_template=prompt_template)
                     except Exception as exc:
                         flash(f"Failed to generate prompt from image: {exc}", "error")
@@ -324,6 +337,9 @@ def media_generator():
         configured=bool(COMFYUI_URL),
         nim_configured=bool(NVIDIA_API_KEY),
         image_to_prompt_prompts=image_to_prompt_data,
+        multiple_angles_prompts=multiple_angles_data,
+        nim_vision_models=NIM_VISION_MODELS,
+        selected_vision_model=selected_vision_model,
         models=models_data,
         active_tab=active_tab,
     )

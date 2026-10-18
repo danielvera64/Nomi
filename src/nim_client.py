@@ -9,6 +9,20 @@ from pathlib import Path
 from langchain_nvidia_ai_endpoints import ChatNVIDIA
 from langchain_core.messages import HumanMessage
 
+DEFAULT_NIM_VISION_MODELS = (
+    "meta/llama-3.2-11b-vision-instruct,meta/llama-3.2-90b-vision-instruct"
+)
+
+
+def get_vision_models() -> list[str]:
+    """Read the comma-separated NIM_VISION_MODEL configuration."""
+    configured = os.getenv("NIM_VISION_MODEL") or DEFAULT_NIM_VISION_MODELS
+    return [
+        model.strip()
+        for model in configured.split(",")
+        if model.strip()
+    ]
+
 
 class NIMClient:
     """Encapsulates interaction with NVIDIA NIM vision model."""
@@ -18,9 +32,7 @@ class NIMClient:
         model: str | None = None,
         api_key: str | None = None,
     ):
-        self.model = model or os.getenv(
-            "NIM_VISION_MODEL", "meta/llama-3.2-11b-vision-instruct"
-        )
+        self.model = model or get_vision_models()[0]
         self.api_key = (api_key or os.getenv("NVIDIA_API_KEY", "")).strip()
         if not self.api_key:
             raise RuntimeError("NVIDIA_API_KEY not set")
