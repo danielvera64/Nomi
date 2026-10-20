@@ -220,7 +220,7 @@
   </form>
 
   {% if images %}
-    <div class="results">
+    <div class="results" id="results">
       <label>Result</label>
       {% for image in images %}
         <a href="{{ url_for('gallery_file', path=image.path) }}" target="_blank" rel="noopener noreferrer">
@@ -337,6 +337,7 @@
       });
     }
     form.addEventListener('submit', () => {
+      document.getElementById('results')?.remove();
       progressDiv.style.display = 'block';
     });
   </script>
