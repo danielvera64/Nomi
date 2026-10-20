@@ -16,10 +16,11 @@ class UpscaleGenerator(MultipleAnglesGenerator):
 
     DEFAULT_WORKFLOW = Path(__file__).resolve().parent.parent / "workflows" / "seedvr2_upscale.json"
 
-    def generate(self, image: str | Path | BinaryIO) -> list[dict]:
+    def generate(self, image: str | Path | BinaryIO, seed: int | None = None) -> list[dict]:
         """Upload the image, queue the workflow, and return upscaled image references."""
         workflow = self._to_api_workflow(self._load_workflow(self.workflow_path))
         self._find_node(workflow, "LoadImage")["inputs"]["image"] = self._upload_image(image)
+        self._set_seed(workflow, seed)
 
         prompt_id = str(uuid.uuid4())
         ws = websocket.WebSocket()

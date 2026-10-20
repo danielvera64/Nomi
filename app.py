@@ -127,6 +127,19 @@ def _safe_output_path(relative_path: str) -> Path | None:
     return candidate
 
 
+def _parse_seed(raw_seed: str) -> int | None:
+    raw_seed = raw_seed.strip()
+    if not raw_seed:
+        return None
+    try:
+        seed = int(raw_seed)
+    except ValueError:
+        raise ValueError("Seed must be a whole number.") from None
+    if seed < 0:
+        raise ValueError("Seed must be zero or greater.")
+    return seed
+
+
 @app.route("/", methods=["GET"])
 def index():
     """Launcher: the uploader plus links to other self-hosted apps."""
@@ -183,6 +196,20 @@ def media_generator():
         with open(MULTIPLE_ANGLES_JSON_PATH, "r") as f:
             multiple_angles_data = json.load(f)
     if request.method == "POST":
+        seed_field = {
+            "prompt-to-image": "prompt_seed",
+            "multiple-angles": "angles_seed",
+            "upscale": "upscale_seed",
+        }.get(active_tab)
+        seed = None
+        seed_error = False
+        if seed_field:
+            try:
+                seed = _parse_seed(request.form.get(seed_field, ""))
+            except ValueError as exc:
+                flash(str(exc), "error")
+                seed_error = True
+
         if request.form.get("generate_prompt"):
             image_file = request.files.get("image_file")
             if image_file and image_file.filename:
@@ -228,6 +255,8 @@ def media_generator():
                     "ComfyUI is not configured — set COMFYUI_URL in your .env file.",
                     "error",
                 )
+            elif seed_error:
+                pass
             else:
                 model_name = request.form.get("model", "").strip()
                 if not model_name:
@@ -242,7 +271,7 @@ def media_generator():
                         base_url=COMFYUI_URL, workflow_path=COMFYUI_WORKFLOW or None
                     )
                     try:
-                        results = generator.generate(prompt)
+                        results = generator.generate(prompt, seed=seed)
                         images = [
                             {
                                 **image,
@@ -275,6 +304,8 @@ def media_generator():
                     flash("Please upload an image to generate multiple angles.", "error")
                 elif not angle_prompt:
                     flash("Please enter a prompt to generate multiple angles.", "error")
+                elif seed_error:
+                    pass
                 else:
                     generator = MultipleAnglesGenerator(base_url=COMFYUI_URL)
                     try:
@@ -283,6 +314,7 @@ def media_generator():
                             prepend=prepend,
                             prompts=angle_prompt,
                             append=append,
+                            seed=seed,
                         )
                         images = [
                             {
@@ -309,10 +341,12 @@ def media_generator():
                 image_file = request.files.get("upscale_image")
                 if not image_file or not image_file.filename:
                     flash("Please upload an image to upscale.", "error")
+                elif seed_error:
+                    pass
                 else:
                     generator = UpscaleGenerator(base_url=COMFYUI_URL)
                     try:
-                        results = generator.generate(image_file)
+                        results = generator.generate(image_file, seed=seed)
                         images = [
                             {
                                 **image,

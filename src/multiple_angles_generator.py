@@ -198,6 +198,7 @@ class MultipleAnglesGenerator(ZImageGenerator):
         prepend: str,
         prompts: str,
         append: str,
+        seed: int | None = None,
     ) -> list[dict]:
         """Upload the reference image, fill the batcher, and return output images."""
         prepend = prepend.strip()
@@ -208,6 +209,7 @@ class MultipleAnglesGenerator(ZImageGenerator):
 
         workflow = self._to_api_workflow(self._load_workflow(self.workflow_path))
         self._find_node(workflow, "LoadImage")["inputs"]["image"] = self._upload_image(image)
+        self._set_seed(workflow, seed)
         batcher = self._find_node(workflow, "SimplePromptBatcher")
         batcher["inputs"]["prepend"] = prepend
         batcher["inputs"]["prompts"] = prompts

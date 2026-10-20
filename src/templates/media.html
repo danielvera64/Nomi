@@ -32,6 +32,26 @@
       background: var(--bg);
       color: var(--text);
     }
+    .seed-field {
+      display: flex;
+      gap: .5rem;
+    }
+    .seed-field input {
+      flex: 1;
+      padding: .6rem .7rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--bg);
+      color: var(--text);
+    }
+    .seed-field button {
+      padding: .6rem .75rem;
+      border: none;
+      border-radius: 8px;
+      background: var(--accent);
+      font-size: 1rem;
+      cursor: pointer;
+    }
     .button-group {
       display: flex;
       gap: 1rem;
@@ -180,6 +200,12 @@
 
       <textarea name="prompt" id="prompt" placeholder="Describe the image you want to generate…">{{ prompt }}</textarea>
 
+      <label for="prompt_seed">Seed</label>
+      <div class="seed-field">
+        <input type="number" name="prompt_seed" id="prompt_seed" min="0" step="1" placeholder="Leave blank for workflow default">
+        <button type="button" class="random-seed" data-seed-input="prompt_seed" title="Random seed" aria-label="Generate random seed">🎲</button>
+      </div>
+
     </section>
 
     <section id="section-multiple-angles">
@@ -202,11 +228,23 @@
 
       <label for="angles_append">Append prompt</label>
       <textarea name="angles_append" id="angles_append" placeholder="Text placed after each angle prompt…"></textarea>
+
+      <label for="angles_seed">Seed</label>
+      <div class="seed-field">
+        <input type="number" name="angles_seed" id="angles_seed" min="0" step="1" placeholder="Leave blank for workflow default">
+        <button type="button" class="random-seed" data-seed-input="angles_seed" title="Random seed" aria-label="Generate random seed">🎲</button>
+      </div>
     </section>
 
     <section id="section-upscale">
       <label for="upscale_image">Load image</label>
       <input type="file" name="upscale_image" id="upscale_image" accept="image/*">
+
+      <label for="upscale_seed">Seed</label>
+      <div class="seed-field">
+        <input type="number" name="upscale_seed" id="upscale_seed" min="0" step="1" placeholder="Leave blank for workflow default">
+        <button type="button" class="random-seed" data-seed-input="upscale_seed" title="Random seed" aria-label="Generate random seed">🎲</button>
+      </div>
     </section>
     <div class="button-group" id="button-group">
       <button type="submit" id="generate-button" value="1">🖼️ Generate prompt from image</button>
@@ -313,6 +351,13 @@
       document.getElementById('angles_prepend').value = template.prepend || '';
       document.getElementById('angles_prompt').value = template.prompt || '';
       document.getElementById('angles_append').value = template.append || '';
+    });
+
+    document.querySelectorAll('.random-seed').forEach(button => {
+      button.addEventListener('click', () => {
+        const input = document.getElementById(button.dataset.seedInput);
+        input.value = crypto.getRandomValues(new Uint32Array(1))[0];
+      });
     });
 
     // Handle copy to clipboard for prompt textarea

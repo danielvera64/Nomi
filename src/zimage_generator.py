@@ -53,6 +53,20 @@ class ZImageGenerator:
                     return node
         raise ValueError("Positive prompt node not found in workflow.")
 
+    @staticmethod
+    def _set_seed(workflow: dict, seed: int | None) -> None:
+        if seed is None:
+            return
+        found = False
+        for node in workflow.values():
+            inputs = node.get("inputs", {})
+            for name in ("seed", "noise_seed"):
+                if name in inputs:
+                    inputs[name] = seed
+                    found = True
+        if not found:
+            raise ValueError("Seed input not found in workflow.")
+
     def _queue_prompt(self, workflow: dict, prompt_id: str) -> None:
         payload = {"prompt": workflow, "client_id": self.client_id, "prompt_id": prompt_id}
         req = urllib.request.Request(
@@ -96,7 +110,7 @@ class ZImageGenerator:
                 )
         return images
 
-    def generate(self, prompt: str) -> list[dict]:
+    def generate(self, prompt: str, seed: int | None = None) -> list[dict]:
         """Queue the workflow and return the output image references."""
         prompt = prompt.strip()
         if not prompt:
@@ -104,6 +118,7 @@ class ZImageGenerator:
 
         workflow = self._load_workflow(self.workflow_path)
         self._find_positive_prompt_node(workflow)["inputs"]["text"] = prompt
+        self._set_seed(workflow, seed)
 
         prompt_id = str(uuid.uuid4())
         ws = websocket.WebSocket()

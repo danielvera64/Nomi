@@ -55,6 +55,9 @@ The media generator has four modes:
 
 Prompt-to-image uses the selected entry’s `description` as a prompt prefix;
 the configured ComfyUI workflow still controls the actual generation model.
+Prompt-to-image, multiple-angles, and upscale have optional seed fields. Leave
+the field blank to use the workflow’s default seed, or use the dice button to
+generate a random 32-bit seed.
 Generated images are previewed and downloaded from the local
 `COMFYUI_OUTPUT_DIR`, not from ComfyUI’s HTTP `/view` endpoint.
 The selected media-generator tab stays active after generation and validation
