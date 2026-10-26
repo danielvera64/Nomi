@@ -63,6 +63,12 @@ Generated images are previewed and downloaded from the local
 The selected media-generator tab stays active after generation and validation
 errors.
 
+Generation history
+
+Prompt-to-image and multiple-angles generations are saved to
+`data/media_history.json` (last 15 entries). The file is ignored by Git and
+not yet displayed in the UI.
+
 If ComfyUI runs on another machine, make sure its output directory is mounted
 or shared with Nomi at the path set in `COMFYUI_OUTPUT_DIR`.
 

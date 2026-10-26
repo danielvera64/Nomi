@@ -61,6 +61,8 @@ COMFYUI_OUTPUT_DIR = Path(
     os.getenv("COMFYUI_OUTPUT_DIR", "~/ComfyUI/output")
 ).expanduser()
 IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+GENERATION_HISTORY_PATH = Path(__file__).resolve().parent / "data" / "media_history.json"
+GENERATION_HISTORY_LIMIT = 15
 
 
 
@@ -138,6 +140,24 @@ def _parse_seed(raw_seed: str) -> int | None:
     if seed < 0:
         raise ValueError("Seed must be zero or greater.")
     return seed
+
+
+def _save_generation_history(entry: dict) -> None:
+    """Keep the latest prompt/seed history on disk without breaking generation."""
+    history: list[dict] = []
+    try:
+        if GENERATION_HISTORY_PATH.exists():
+            loaded = json.loads(GENERATION_HISTORY_PATH.read_text(encoding="utf-8"))
+            if isinstance(loaded, list):
+                history = loaded
+        history.append(entry)
+        GENERATION_HISTORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+        GENERATION_HISTORY_PATH.write_text(
+            json.dumps(history[-GENERATION_HISTORY_LIMIT:], indent=2) + "\n",
+            encoding="utf-8",
+        )
+    except (OSError, TypeError, ValueError):
+        pass
 
 
 @app.route("/", methods=["GET"])
@@ -248,6 +268,7 @@ def media_generator():
                 flash("Please upload an image to generate a prompt.", "error")
         elif request.form.get("generate_image"):
             prompt = request.form.get("prompt", "").strip()
+            user_prompt = prompt
             if not prompt:
                 flash("Please enter a prompt to generate an image.", "error")
             elif not COMFYUI_URL:
@@ -283,10 +304,14 @@ def media_generator():
                             }
                             for image in results
                         ]
-                        if not images:
-                            flash(
-                                "Generation finished but no images were returned.", "error"
-                            )
+                        if images:
+                            _save_generation_history({
+                                "mode": "prompt-to-image",
+                                "prompt": user_prompt,
+                                "seed": seed,
+                            })
+                        else:
+                            flash("Generation finished but no images were returned.", "error")
                     except Exception as exc:
                         flash(f"Image generation failed: {exc}", "error")
         elif request.form.get("generate_angles"):
@@ -327,7 +352,15 @@ def media_generator():
                             }
                             for image in results
                         ]
-                        if not images:
+                        if images:
+                            _save_generation_history({
+                                "mode": "multiple-angles",
+                                "prompt": angle_prompt,
+                                "prepend": prepend,
+                                "append": append,
+                                "seed": seed,
+                            })
+                        else:
                             flash("Generation finished but no images were returned.", "error")
                     except Exception as exc:
                         flash(f"Multiple-angle generation failed: {exc}", "error")
